@@ -29,3 +29,22 @@ Diese Änderungen machen erstmals einen direkt herunterladbaren ZIP-Build verfü
 Der native Sandbox-Test nutzt Ubuntu 22.04, da Ubuntus 24.04-AppArmor-Vorgaben
 den mitgelieferten Bubblewrap-Helfer beim Einrichten des Netzwerk-Namensraums
 blockieren können. Die Sandbox-Konfiguration des Plugins bleibt unverändert.
+
+## Verbindungsaufbau: Korrektur nach erstem Gerätetest
+
+Ein Gerät zeigte dauerhaft „Verbindung wird hergestellt …“. Der Bildschirm allein
+belegt noch keine konkrete Backend-Ursache. Beim Prüfen wurde ein Startproblem
+gefunden: `pty`/`tty` sind in einer eingefrorenen Decky-Python-Umgebung nicht
+zwingend enthalten. Das Terminal verwendet jetzt direkt Linux/CPythons
+`os.openpty()`, ohne diese optional eingebundenen Module zu importieren.
+
+Backend-Importe finden innerhalb des abgefangenen Starts statt. Import- und
+Initialisierungsfehler werden über RPC und das Pluginprotokoll sichtbar;
+RPC wartet auf abgeschlossenen Start. Die Oberfläche beendet ausbleibende
+Zustandsabfragen nach zehn Sekunden, zeigt einen Fehler und erlaubt erneutes
+Verbinden. Mutierende Aktionen werden dabei nicht automatisch wiederholt.
+
+Regressionen: echter Plugin-Einstiegspunkt bei gesperrten `pty`/`tty`-Importen,
+Startfehler vor und nach Service-Erzeugung, RPC während des Starts; im Browser
+hängender Transport, sichtbare Importfehler und erfolgreiche Wiederverbindung.
+Die Behebung auf dem betroffenen Steam Deck muss noch bestätigt werden.

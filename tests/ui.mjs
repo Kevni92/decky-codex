@@ -8,7 +8,7 @@ const { chromium } = require("playwright");
 const root = resolve(".");
 const server = createServer(async (req, res) => {
   try {
-    if (req.url === "/") { res.setHeader("Content-Type", "text/html; charset=utf-8"); res.end('<html><head><meta charset="utf-8"></head><body style="margin:0"><div id="root"></div><script>window.process={env:{NODE_ENV:"production"}}</script><script src="/out/ui-host.js"></script></body></html>'); return; }
+    if (req.url.split("?")[0] === "/") { res.setHeader("Content-Type", "text/html; charset=utf-8"); res.end('<html><head><meta charset="utf-8"></head><body style="margin:0"><div id="root"></div><script>window.process={env:{NODE_ENV:"production"}}</script><script src="/out/ui-host.js"></script></body></html>'); return; }
     const path = resolve(root, "." + req.url);
     if (!path.startsWith(root + "/")) throw Error("path");
     res.setHeader("Content-Type", "text/javascript; charset=utf-8"); res.end(await readFile(path));
@@ -47,6 +47,22 @@ try {
   await page.getByRole("button", { name: "Authentifizieren", exact: true }).click();
   assert.equal(await page.evaluate(() => JSON.stringify(window.__test.state).includes("not-a-real-password")), false);
   assert.deepEqual(errors, []);
+  // A dead Decky backend must stop showing the indefinite connection screen.
+  await page.goto(`http://127.0.0.1:${server.address().port}/?transport=hang`);
+  await page.getByRole("status").filter({ hasText: "Verbindung wird hergestellt" }).waitFor();
+  await page.getByRole("alert").filter({ hasText: "Das Backend antwortet nicht" }).waitFor({ timeout: 13000 });
+  assert.equal(await page.evaluate(() => window.__test.calls.length), 1);
+  await page.evaluate(() => { window.__test.transport = null; });
+  await page.getByRole("button", { name: "Erneut verbinden", exact: true }).click();
+  await page.getByRole("heading", { name: "Speicherübersicht" }).waitFor();
+  await page.goto(`http://127.0.0.1:${server.address().port}/?transport=reject`);
+  await page.getByRole("alert").filter({ hasText: "example_missing_module" }).waitFor();
+  assert.equal(await page.getByRole("button", { name: "Erneut verbinden", exact: true }).isEnabled(), true);
+  await page.evaluate(() => { window.__test.transport = null; });
+  await page.getByRole("button", { name: "Erneut verbinden", exact: true }).click();
+  await page.getByRole("heading", { name: "Speicherübersicht" }).waitFor();
+  assert.deepEqual(errors, []);
+  console.log("Backend startup: stalled transport times out, import errors are visible, reconnect recovers without mutation");
   await page.screenshot({ path: "out/ui-preview.png", fullPage: true });
   console.log("Rendered compiled plugin: tables, HTML safety, activity panel, choices, cleanup confirmation and masked password passed");
 } finally { await browser.close(); server.close(); }

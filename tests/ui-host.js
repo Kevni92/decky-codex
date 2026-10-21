@@ -19,11 +19,13 @@ const state = {
   inventory: { id: "scan", warnings: [], errors: 0, metric: "Belegter Platz", visited: 42,
     rows: [{ id: "file", name: "Archiv.zip", path: "/home/deck/Downloads/Archiv.zip", bytes: 2400000000, logicalBytes: 2400000000, category: "Download" }] }
 };
-window.__test = { calls, state, request(kind) { state.requests = [{ id: "req", generation: "ui-test", kind, title: kind === "password" ? "Linux-Benutzerpasswort" : "X oder Y?", details: "Erklärung der Auswirkungen", options: kind === "question" ? [{ id: "x", value: "X", label: "Lokale Installation", description: "Nur für diesen Benutzer" }, { id: "y", value: "Y", label: "Systemweite Installation", description: "Benötigt Administratorrechte" }] : [] }]; event?.({ ...state }); } };
+window.__test = { calls, state, transport: new URLSearchParams(location.search).get("transport"), request(kind) { state.requests = [{ id: "req", generation: "ui-test", kind, title: kind === "password" ? "Linux-Benutzerpasswort" : "X oder Y?", details: "Erklärung der Auswirkungen", options: kind === "question" ? [{ id: "x", value: "X", label: "Lokale Installation", description: "Nur für diesen Benutzer" }, { id: "y", value: "Y", label: "Systemweite Installation", description: "Benötigt Administratorrechte" }] : [] }]; event?.({ ...state }); } };
 const api = {
   _version: 2,
   callable: () => async (method, params) => {
     calls.push({ method, params: method === "resolve" ? { ...params, password: params.password ? "[redacted]" : undefined } : params });
+    if (method === "snapshot" && window.__test.transport === "hang") return new Promise(() => {});
+    if (method === "snapshot" && window.__test.transport === "reject") throw new Error("Backend-Start fehlgeschlagen: ModuleNotFoundError: example_missing_module");
     if (method === "resolve") state.requests = [];
     if (method === "cleanup") state.requests = [{ id: "cleanup", generation: "ui-test", kind: "approval", title: "Auswahl in den Papierkorb verschieben?", details: "/home/deck/Downloads/Archiv.zip", options: [] }];
     return { ok: true, state: { ...state } };
