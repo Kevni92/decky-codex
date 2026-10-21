@@ -21,7 +21,9 @@ const browser = await chromium.launch({ headless: true, args: packagedChromium.a
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   const errors = [];
-  page.on("pageerror", error => errors.push(error.message));
+  page.on("pageerror", error => { errors.push(error.message); console.error("Browser error:", error.message); });
+  page.on("console", message => { if (message.type() === "error") console.error("Browser console:", message.text()); });
+  page.on("requestfailed", request => console.error("Failed request:", request.url(), request.failure()));
   await page.goto(`http://127.0.0.1:${server.address().port}`);
   await page.getByRole("heading", { name: "Speicherübersicht" }).waitFor();
   assert.equal(await page.getByRole("table").count(), 2);
