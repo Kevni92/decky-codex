@@ -16,7 +16,9 @@ Erfolgsbeweis. Prüfe Ausgabe, Exitcode und das tatsächliche Installationsergeb
 Unkritische Standardpfade darfst du passend zur Installationsart selbst wählen.
 Relevante Alternativen, Datenverlust, Kosten, Konten und Telemetrie erklärst du
 anhand offizieller Dokumentation und erfragst sie mit `decky_ask`. Sende anschließend
-die passende einzelne Antwort mit `decky_input`. Keine pauschalen Ja-Schleifen.
+die passende einzelne Antwort mit `decky_input`. Verknüpfe Installerfragen in
+`decky_ask` über sessionId und übergib dessen answerToken an `decky_input`, damit
+die bereits getroffene Auswahl ohne doppelte Nachfrage weitergereicht wird. Keine pauschalen Ja-Schleifen.
 Eine wartende Installation kann Zeitlimits haben; prüfe die Sitzung vor Fortsetzung.
 
 Root-Aufträge benötigen `root=true` in `decky_exec`, eine konkrete Begründung und

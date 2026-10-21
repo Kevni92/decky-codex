@@ -4,7 +4,7 @@ import { ButtonItem, DialogButton, Dropdown, Focusable, Navigation, PanelSection
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
-type Message = { id: string; role: string; text: string };
+type Message = { id: string; role: string; text: string; activities?: State["activities"] };
 type Request = { id: string; kind: string; title: string; details: string; generation: string; options: { id: string; label: string; description: string; value: string }[] };
 type Row = { id: string; name: string; path: string; bytes: number; logicalBytes: number; category: string };
 type State = {
@@ -142,6 +142,7 @@ function Chat() {
   const [model, setModel] = useState("");
   const [title, setTitle] = useState("");
   const scroll = useRef<HTMLDivElement>(null);
+  const composer = useRef<HTMLTextAreaElement>(null);
   const follow = useRef(true);
   const chatId = state?.chat?.id || "new";
   useEffect(() => { setDraft(drafts.get(chatId) || ""); setTitle(state?.chat?.title || ""); }, [chatId]);
@@ -175,13 +176,20 @@ function Chat() {
       <div className="dc-buttons"><DialogButton disabled={state.busy} onClick={() => act("new_chat")}>Neuer Chat</DialogButton><DialogButton onClick={() => act("scan")}>Große Dateien untersuchen</DialogButton><DialogButton onClick={() => act("cancel_scan")}>Scan stoppen</DialogButton></div>
       {!state.account && <div className="dc-card"><p>Verbinde deinen ChatGPT-Account, um mit Codex zu arbeiten. Die lokale Speicheranalyse kannst du bereits verwenden.</p><DialogButton onClick={() => { setView("settings"); void act("refresh_account"); }}>Konto einrichten</DialogButton></div>}
       <div ref={scroll} onScroll={e => { const el = e.currentTarget; follow.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80; }} style={{ maxHeight: "45vh", overflowY: "auto", paddingRight: 8 }}>
-        {state.chat?.messages.map(message => <article key={message.id} className={`dc-message ${message.role === "user" ? "dc-user" : ""}`}><div className="dc-role">{message.role === "user" ? "Du" : "Codex"}</div><RichText text={message.text} /></article>)}
+        {state.chat?.messages.map(message => message.role === "activity" ? <Activity key={message.id} state={{ ...state, busy: false, requests: [], activities: message.activities || [] }} /> : <article key={message.id} className={`dc-message ${message.role === "user" ? "dc-user" : ""}`}><div className="dc-role">{message.role === "user" ? "Du" : "Codex"}</div><RichText text={message.text} /></article>)}
       </div>
       <Activity state={state} />
       {state.sessions.map(session => <div className="dc-card" key={session.id}><strong>{session.running ? "◌ Läuft: " : `Exit ${session.exitCode}: `}{session.label}</strong><Focusable><pre>{session.output || "Noch keine Ausgabe."}</pre></Focusable>{session.running && <DialogButton onClick={() => act("stop_session", { id: session.id })}>Prozess stoppen</DialogButton>}</div>)}
       <InventoryView state={state} act={act} />
       {state.models.length > 0 && <Dropdown rgOptions={state.models.map(m => ({ data: m.model || m.id, label: m.displayName || m.model || m.id }))} selectedOption={model || (state.models.find(m => m.isDefault)?.model || state.models[0].model || state.models[0].id)} onChange={o => setModel(String(o.data))} />}
-      <TextField label="Deine Nachricht" value={draft} disabled={state.busy} onChange={e => { setDraft(e.target.value); drafts.set(chatId, e.target.value); }} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); } }} />
+      <Focusable onActivate={() => composer.current?.focus()} onCancel={() => composer.current?.blur()}>
+        <label htmlFor="decky-codex-message">Deine Nachricht</label>
+        <textarea id="decky-codex-message" ref={composer} rows={3} value={draft} disabled={state.busy}
+          style={{ width: "100%", padding: 12, background: "#101822", color: "#edf4fa", border: "1px solid #526b80", borderRadius: 8, font: "inherit", resize: "vertical" }}
+          onChange={e => { setDraft(e.target.value); drafts.set(chatId, e.target.value); }}
+          onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); } }} />
+        <div className="dc-muted">A: Eingabe aktivieren · STEAM + X: Bildschirmtastatur · Umschalt + Enter: neue Zeile</div>
+      </Focusable>
       <div className="dc-buttons"><DialogButton disabled={state.busy || !draft.trim()} onClick={send}>Senden</DialogButton><DialogButton disabled={!state.busy && !state.sessions.some(s => s.running)} onClick={() => act("interrupt")}>Aufgabe stoppen</DialogButton></div>
     </>}
   </div>;

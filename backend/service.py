@@ -28,9 +28,9 @@ TOOLS = [
          {"argv": {"type": "array", "items": STRING}, "cwd": STRING, "reason": STRING, "root": {"type": "boolean"}}, ["argv", "reason"]),
     tool("decky_poll", "Read output and exit status of an installer session. A running process may be waiting for input. Never claim success without checking.", {"sessionId": STRING}, ["sessionId"]),
     tool("decky_input", "Send one answer to a running installer. Explain/research important choices and use decky_ask first. Only empty default or a safe home path may be marked automatic. Never submit passwords.",
-         {"sessionId": STRING, "value": STRING, "reason": STRING, "automatic": {"type": "boolean"}}, ["sessionId", "value", "reason"]),
+         {"sessionId": STRING, "value": STRING, "reason": STRING, "automatic": {"type": "boolean"}, "answerToken": STRING}, ["sessionId", "value", "reason"]),
     tool("decky_ask", "Ask the user a meaningful choice in a controller-friendly chat card. Explain the impact of each option. Wait for the answer; no default on timeout.",
-         {"question": STRING, "options": {"type": "array", "items": {"type": "object", "properties": {"label": STRING, "description": STRING, "value": STRING}, "required": ["label", "description", "value"], "additionalProperties": False}}}, ["question", "options"]),
+         {"question": STRING, "sessionId": STRING, "options": {"type": "array", "items": {"type": "object", "properties": {"label": STRING, "description": STRING, "value": STRING}, "required": ["label", "description", "value"], "additionalProperties": False}}}, ["question", "options"]),
     tool("decky_storage_scan", "Find large files by allocated bytes, excluding all known Steam libraries and sensitive data. Shows a real selectable table. Default root is the user's home. Never interpret a scan as deletion consent.",
          {"roots": {"type": "array", "items": STRING}}),
     tool("decky_propose_cleanup", "Propose moving specifically selected inventory IDs to the trash. User must explicitly confirm; never delete permanently. Trash does not free space until emptied.",
@@ -68,6 +68,7 @@ class Service:
         self.closed = False
         self.tools_tasks = set()
         self.seen_sends = set()
+        self.installer_answers = {}
         self.last_activity = time.monotonic()
 
     async def initialize(self):
@@ -343,7 +344,7 @@ class Service:
             else:
                 await self.client.request("thread/resume", {"threadId": chat["thread"],
                     "cwd": str(self.workspace), "developerInstructions": self.agent_text})
-            if len(chat["messages"]) >= 400 or sum(len(m["text"].encode()) for m in chat["messages"]) > 2 * 1024 * 1024:
+            if len(chat["messages"]) >= 400 or len(json.dumps(chat["messages"]).encode()) > 2 * 1024 * 1024:
                 raise ValueError("Lokales Nachrichtenlimit erreicht. Bitte einen neuen Chat beginnen.")
             self.seen_sends.add(nonce)
             self.busy = True
@@ -449,7 +450,20 @@ class Service:
                 if not request["future"].done():
                     request["future"].set_exception(ValueError("Turn beendet."))
             if self.current:
-                self.persist(self.chat())
+                chat = self.chat()
+                if self.activities:
+                    remaining = 32000
+                    history = []
+                    for item in self.activities:
+                        saved = dict(item)
+                        saved["details"] = item["details"][:remaining]
+                        remaining -= len(saved["details"])
+                        history.append(saved)
+                    group = {"id": uuid.uuid4().hex, "role": "activity", "text": "", "activities": history}
+                    last_user = max((i for i, m in enumerate(chat["messages"]) if m["role"] == "user"), default=len(chat["messages"]) - 1)
+                    chat["messages"].insert(last_user + 1, group)
+                    self.activities = []
+                self.persist(chat)
         elif method == "account/login/completed":
             self.login = None
             if p.get("success"):
@@ -511,7 +525,15 @@ class Service:
             choices = [{"id": str(i), "label": str(o["label"])[:100], "description": str(o["description"])[:1200], "value": str(o["value"])[:1024]} for i, o in enumerate(options)]
             answer = await self.ask("question", str(args.get("question", "Deine Entscheidung"))[:2000], options=choices)
             self.activity("Deine Auswahl", str(answer), "completed")
-            return {"answer": answer}
+            result = {"answer": answer}
+            if args.get("sessionId"):
+                session = self.sessions.get(args["sessionId"])
+                if not session or session.process.returncode is not None:
+                    raise ValueError("Installerfrage ist nicht mehr aktuell.")
+                token = uuid.uuid4().hex
+                self.installer_answers[token] = (session.id, answer, time.monotonic())
+                result["answerToken"] = token
+            return result
         if name == "decky_exec":
             argv = args.get("argv")
             if not isinstance(argv, list) or not argv or len(argv) > 128 or not all(isinstance(a, str) and "\0" not in a and len(a) < 8192 for a in argv):
@@ -569,7 +591,14 @@ class Service:
                 raise ValueError("Prozesssitzung fehlt.")
             value = args.get("value", "")
             automatic = args.get("automatic") is True and (value == "" or (isinstance(value, str) and value.startswith(str(self.home) + "/") and within(Path(value).resolve(), self.home)))
-            if not automatic or session.label.startswith("Root:"):
+            token = args.get("answerToken")
+            approved = False
+            if token:
+                bound = self.installer_answers.pop(token, None)
+                if not bound or bound[0] != session.id or bound[1] != value or time.monotonic() - bound[2] > 300:
+                    raise ValueError("Antwortfreigabe ist ungültig oder bereits verwendet.")
+                approved = True
+            if not approved and (not automatic or session.label.startswith("Root:")):
                 await self.ask("approval", "Installerantwort senden?", str(args.get("reason", ""))[:2000] + "\n\nAntwort: " + str(value))
             session.write(value)
             return {"sent": True}

@@ -7,7 +7,7 @@ import struct
 from types import SimpleNamespace
 import unittest
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 from backend.protocol import CodexClient
 from backend.service import Service, TOOLS
 from backend.storage import Inventory, steam_exclusions, vdf
@@ -110,6 +110,35 @@ class ServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response, {"decision": "decline"})
         response = await self.service.handle({"id": 2, "method": "item/permissions/requestApproval", "params": {}})
         self.assertEqual(response["permissions"], {})
+
+    async def test_installer_choice_bound_once_without_duplicate_question(self):
+        session = SimpleNamespace(id="installer", process=SimpleNamespace(returncode=None), label="Root: installer", write=Mock())
+        self.service.sessions[session.id] = session
+        try:
+            task = asyncio.create_task(self.service.run_tool("decky_ask", {"sessionId": session.id, "question": "X oder Y?", "options": [
+                {"label": "X", "description": "Lokal", "value": "x"},
+                {"label": "Y", "description": "Anders", "value": "y"}]}))
+            await asyncio.sleep(0)
+            rid = next(iter(self.service.requests))
+            await self.service.resolve({"id": rid, "generation": self.service.generation, "choice": "0"})
+            chosen = await task
+            args = {"sessionId": session.id, "value": chosen["answer"], "answerToken": chosen["answerToken"], "reason": "Gewählte Variante"}
+            await self.service.run_tool("decky_input", args)
+            session.write.assert_called_once_with("x")
+            self.assertFalse(self.service.requests)
+            with self.assertRaises(ValueError):
+                await self.service.run_tool("decky_input", args)
+        finally:
+            self.service.sessions.clear()
+
+    async def test_completed_activity_is_saved_with_its_answer(self):
+        await self.service.new_chat({})
+        self.service.chat()["messages"] = [{"id": "u", "role": "user", "text": "Prüfe"}, {"id": "a", "role": "assistant", "text": "Ergebnis"}]
+        self.service.activity("Technischer Schritt", "Ausgabe")
+        await self.service.handle({"method": "turn/completed", "params": {"turn": {"status": "completed"}}})
+        stored = json.loads(self.service.db.execute("SELECT body FROM chats").fetchone()[0])
+        self.assertEqual(stored["messages"][1]["role"], "activity")
+        self.assertEqual(stored["messages"][1]["activities"][0]["details"], "Ausgabe")
 
 
 class StorageTests(unittest.TestCase):
