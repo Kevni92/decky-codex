@@ -2,7 +2,6 @@
 import asyncio
 import errno
 import os
-import pty
 import re
 import signal
 import time
@@ -30,7 +29,9 @@ class Session:
     async def start(cls, argv, cwd, env, changed, label=None):
         if not isinstance(argv, list) or not argv or len(argv) > 128 or not all(isinstance(x, str) and "\0" not in x for x in argv):
             raise ValueError("Ungültiger Befehl.")
-        master, slave = pty.openpty()
+        # Decky freezes only part of the stdlib; pty/tty may be absent.
+        # On Linux os.openpty is the same native primitive used by pty.openpty.
+        master, slave = os.openpty()
         os.set_blocking(master, False)
         try:
             process = await asyncio.create_subprocess_exec(*argv, cwd=str(cwd), env=env,

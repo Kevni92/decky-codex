@@ -24,6 +24,7 @@ const backend = callable<[method: string, params: Record<string, unknown>], Repl
 const listeners = new Set<(s: State) => void>();
 const drafts = new Map<string, string>();
 let current: State | undefined;
+let snapshotRequest: Promise<Reply> | undefined;
 function publish(s: State) { current = s; listeners.forEach(fn => fn(s)); }
 async function rpc(method: string, params: Record<string, unknown> = {}) {
   const result = await backend(method, params);
@@ -31,21 +32,48 @@ async function rpc(method: string, params: Record<string, unknown> = {}) {
   if (!result.ok) throw new Error(result.error || "Anfrage fehlgeschlagen");
   return result;
 }
+function snapshot() {
+  if (snapshotRequest) return snapshotRequest;
+  snapshotRequest = new Promise<Reply>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("Das Backend antwortet nicht. Bitte Decky neu starten oder die aktuelle Release-ZIP erneut installieren. Bleibt der Fehler bestehen, wird das Decky-Codex-Pluginprotokoll benötigt.")), 10000);
+    // A read-only request may time out. Never retry mutating actions here.
+    Promise.resolve().then(() => backend("snapshot", {})).then(result => {
+      if (!result?.state) throw new Error("Das Backend hat keinen gültigen Zustand geliefert.");
+      if (!result.ok) throw new Error(result.error || "Backend-Anfrage fehlgeschlagen");
+      resolve(result);
+    }).catch(reject).finally(() => clearTimeout(timer));
+  }).then(result => { publish(result.state); return result; }).finally(() => { snapshotRequest = undefined; });
+  return snapshotRequest;
+}
 function useBackend() {
   const [state, setState] = useState(current);
   const [error, setError] = useState("");
+  const [connecting, setConnecting] = useState(false);
+  const retry = async () => {
+    setConnecting(true); setError("");
+    try { await snapshot(); } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    finally { setConnecting(false); }
+  };
   useEffect(() => {
-    listeners.add(setState);
-    rpc("snapshot").catch(e => setError(String(e.message)));
+    let mounted = true;
+    const receive = (s: State) => { setState(s); setError(""); };
+    listeners.add(receive);
+    const reconcile = async () => {
+      if (mounted) setConnecting(true);
+      try { await snapshot(); }
+      catch (e) { if (mounted) setError(e instanceof Error ? e.message : String(e)); }
+      finally { if (mounted) setConnecting(false); }
+    };
+    void reconcile();
     // Reconcile only while a UI is mounted. Events provide the live stream.
-    const timer = setInterval(() => { rpc("snapshot").catch(() => {}); }, 8000);
-    return () => { listeners.delete(setState); clearInterval(timer); };
+    const timer = setInterval(() => { void reconcile(); }, 15000);
+    return () => { mounted = false; listeners.delete(receive); clearInterval(timer); };
   }, []);
   const act = async (method: string, params: Record<string, unknown> = {}) => {
     setError("");
     try { await rpc(method, params); } catch (e) { setError(e instanceof Error ? e.message : "Anfrage fehlgeschlagen"); }
   };
-  return { state, error, act };
+  return { state, error, act, retry, connecting };
 }
 const css = `
 .dc{color:#e9eef5;font:16px/1.55 system-ui,sans-serif;--dc-muted:#a8b4c3;--dc-border:#344353}
@@ -136,7 +164,7 @@ function InventoryView({ state, act }: { state: State; act: (m: string, p?: Reco
   </section>;
 }
 function Chat() {
-  const { state, error, act } = useBackend();
+  const { state, error, act, retry, connecting } = useBackend();
   const [view, setView] = useState("chat");
   const [draft, setDraft] = useState("");
   const [model, setModel] = useState("");
@@ -154,7 +182,9 @@ function Chat() {
     try { await rpc("send", { text, model, nonce: crypto.randomUUID() }); }
     catch { setDraft(text); drafts.set(chatId, text); }
   };
-  if (!state) return <div className="dc" style={{ padding: 60 }}><style>{css}</style><h2>Decky Codex</h2><p>{error || "Verbindung wird hergestellt …"}</p></div>;
+  if (!state) return <div className="dc" style={{ padding: 60 }}><style>{css}</style><h2>Decky Codex</h2><p role={error ? "alert" : "status"}>{error || "Verbindung wird hergestellt …"}</p>
+    <DialogButton disabled={connecting} onClick={() => { void retry(); }}>Erneut verbinden</DialogButton>
+    <p className="dc-muted">Es werden noch keine Befehle ausgeführt. Falls der Start fehlschlägt: Pluginprotokoll unter homebrew/logs/Decky Codex prüfen.</p></div>;
   return <div className="dc" style={{ padding: "52px 32px 20px", height: "100vh", overflowY: "auto", background: "#131e29" }}>
     <style>{css}</style>
     <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16 }}>
@@ -195,8 +225,8 @@ function Chat() {
   </div>;
 }
 function Panel() {
-  const { state } = useBackend();
-  return <PanelSection title="Decky Codex"><PanelSectionRow><div style={{ paddingBottom: 12 }}>{state?.requests.length ? "Deine Entscheidung wird benötigt" : state?.busy ? "Codex arbeitet …" : "Bereit für deine nächste Aufgabe"}</div><ButtonItem layout="below" onClick={() => { Navigation.Navigate("/decky-codex"); Navigation.CloseSideMenus(); }}>Chat öffnen</ButtonItem></PanelSectionRow></PanelSection>;
+  const { state, error } = useBackend();
+  return <PanelSection title="Decky Codex"><PanelSectionRow><div style={{ paddingBottom: 12 }}>{error || (!state ? "Verbindung wird hergestellt …" : state.requests.length ? "Deine Entscheidung wird benötigt" : state.busy ? "Codex arbeitet …" : "Bereit für deine nächste Aufgabe")}</div><ButtonItem layout="below" onClick={() => { Navigation.Navigate("/decky-codex"); Navigation.CloseSideMenus(); }}>Chat öffnen</ButtonItem></PanelSectionRow></PanelSection>;
 }
 export default definePlugin(() => {
   const listener = addEventListener<[State]>("decky_codex_state", publish);

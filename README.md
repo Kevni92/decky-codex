@@ -64,3 +64,12 @@ Tokens oder ChatGPT-Anmeldedaten in CI. Paketdatei, SHA256SUMS und build.json si
 direkt im Release verfügbar. Das äußere Actions-Artefaktarchiv ist nicht die Plugin-ZIP.
 
 [Technischer Plan](docs/IMPLEMENTIERUNGSPLAN.md) · [Kompatibilität](docs/COMPATIBILITY.md)
+
+## Falls „Verbindung wird hergestellt …“ stehen bleibt
+
+Die aktuelle Release-ZIP erneut installieren und Decky neu starten. Nach spätestens
+zehn Sekunden erscheint bei fehlender Backend-Antwort eine Fehlermeldung mit
+„Erneut verbinden“. Startfehler werden direkt angezeigt und unter
+`~/homebrew/logs/Decky Codex/` protokolliert (bei abweichendem Decky-Verzeichnis
+entsprechend dort). Für einen Fehlerbericht genügt zunächst der angezeigte
+Fehlertext; keine Anmeldedateien oder Passwörter weitergeben.

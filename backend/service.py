@@ -66,6 +66,7 @@ class Service:
         self.flush_task = None
         self.generation = uuid.uuid4().hex
         self.closed = False
+        self.reaper = None
         self.tools_tasks = set()
         self.seen_sends = set()
         self.installer_answers = {}
@@ -642,7 +643,8 @@ class Service:
             return
         self.closed = True
         self.inventory.cancelled = True
-        self.reaper.cancel()
+        if self.reaper:
+            self.reaper.cancel()
         for request in list(self.requests.values()):
             if not request["future"].done():
                 request["future"].cancel()
