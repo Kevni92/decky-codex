@@ -14,13 +14,13 @@ Decky Codex integriert einen handlungsfähigen KI-Assistenten in den Gaming-Modu
 
 | Bereich | Erste nutzbare Version | Spätere Erweiterung |
 | --- | --- | --- |
-| Chat | Streaming, neuer Chat, Verlauf öffnen, umbenennen, löschen, Abbrechen | Suche, Export, Anhänge |
+| Chat | Streaming mit Markdown/Tabellen, Aktivitätspanel, Frage-/Aktionskarten und Verlauf | Suche, Export, Anhänge |
 | Bedienung | Decky-Einstieg, große Chatansicht, Controller, Touch, Bildschirmtastatur | Zusätzliche Eingabehilfen |
 | Anmeldung | ChatGPT-Tarif über einen für diese Integration zulässigen offiziellen Anmeldeweg | Weitere ausdrücklich gewählte Provider |
-| Diagnose | Lesender Zugriff auf freigegebene Gerätedaten und Befehle | Umfangreichere Diagnoseabläufe |
+| Diagnose | Lesender Zugriff und Speicheranalyse mit Steam-Spiel-Ausschluss, Ergebnistabelle und bestätigter Bereinigung | Umfangreichere Diagnoseabläufe |
 | Änderungen | Einzelne freigegebene Befehle und Dateiänderungen als Benutzer | Begrenzte, geprüfte Installationsrezepte |
-| Installation | Nichtinteraktive Benutzerinstallationen, zunächst Flatpak im Benutzerkontext | EmuDeck und andere interaktive Installer |
-| Systemverwaltung | Änderungen im Benutzerkontext | Eng begrenzter privilegierter Helfer nach eigener Sicherheitsprüfung |
+| Installation | Benutzerinstallationen und textbasierte Installer mit erklärten Rückfragen | EmuDeck und weitere grafische Installer nach Nachweis |
+| Systemverwaltung | Benutzeraktionen und optional einzeln freigegebene Root-Aufträge mit Passwort | Weitere geprüfte Systemrezepte |
 | Veröffentlichung | Installierbare ZIP je erfolgreichem Build und Release-Asset | Aufnahme in den Decky Plugin Store |
 
 Nicht Bestandteil der ersten Version: allgemeine Root-Shell, automatische SteamOS-Basisupdates, Deaktivieren des schreibgeschützten Systembereichs, beliebige GUI-Fernsteuerung, Sprachassistent, Cloud-Chat-Synchronisierung oder automatisches Eingreifen in laufende Spiele. ChatGPT-Webverläufe werden nicht importiert. Die Oberfläche ist eine eigene Codex-Anwendung, keine eingebettete ChatGPT-Website.
@@ -68,12 +68,14 @@ flowchart TD
   UI["Decky-Chatoberfläche"] -->|"RPC und Ereignisse"| PY["Python-Backend"]
   PY -->|"stdio"| CX["Codex App Server"]
   PY --> META["Lokale Metadaten"]
+  PY --> ROOT["Root-Broker mit Passwort"]
+  ROOT --> HOST
   CX --> CLOUD["OpenAI-Dienst"]
   CX --> POLICY["Sandbox und Freigaben"]
   POLICY --> HOST["Benutzerdateien und Prozesse"]
 ```
 
-Die Freigabeanzeige im Frontend entscheidet über anstehende Anfragen; sie führt keine Befehle aus. Das Backend ordnet Antworten der konkreten Anfrage zu. Die Runtime und ihre Betriebssystemgrenzen erzwingen den erlaubten Zugriff. Ein zukünftiger Root-Helfer wäre eine eigene Vertrauensgrenze und gehört nicht zum MVP.
+Die Freigabeanzeige im Frontend entscheidet über anstehende Anfragen; sie führt keine Befehle aus. Das Backend ordnet Antworten der konkreten Anfrage zu. Die Runtime und ihre Betriebssystemgrenzen erzwingen den erlaubten Zugriff. Der optionale Root-Broker ist eine eigene Vertrauensgrenze: Nur die ausdrücklich freigegebene Aktion wird nach lokaler Passwortauthentifizierung privilegiert ausgeführt. Die allgemeinen Backend-/Codex-Prozesse bleiben Benutzerprozesse.
 
 ## 4. Geplante Repository-Struktur
 
@@ -92,7 +94,11 @@ Alle hier genannten Dateien außer diesem Dokument sind zukünftige Arbeit.
 | `src/services/backend.ts` | Typisierte Decky-Aufrufe und Ereignisabonnement |
 | `main.py` | Kleine Decky-Einstiegsklasse mit öffentlichen RPC-Methoden |
 | `backend/codex/` | Prozessverwaltung, Protokolladapter, Versionsprüfung |
-| `backend/services/` | Auth, Chats, Freigaben, Konfiguration und Persistenz |
+| `backend/services/` | Auth, Chats, Freigaben, Persistenz, interaktive Installer und Dateiinventare |
+| `backend/privilege/` | Root-Broker, separater Auth-Kanal und kurzlebiger privilegierter Runner |
+| `backend/tools/` | Begrenzte Modellwerkzeuge für Fragekarten, Installer, Inventare und Aktionsvorschläge |
+| `agent/` | Mitgeliefertes Runtime-Regelwerk, Skillpaket, Quellen und Manifest |
+| `AGENTS.md` | Künftige Regeln für Entwicklungsagenten, getrennt von der Runtime-Rolle |
 | `backend/security/` | Profilverwaltung, Pfadprüfung, redigierte Diagnosedaten |
 | `schemas/codex/` | Aus der ausgewählten Runtime erzeugte Protokollschemata |
 | `schemas/plugin/` | Eigenes versioniertes Frontend-/Backend-Protokoll |
@@ -139,7 +145,7 @@ Klick, Touch oder A öffnet eine chronologische Liste der vom System gemeldeten 
 | --- | --- |
 | Recherche | Suchanfrage und gemeldete Quellen/URLs, soweit von der Runtime geliefert |
 | Befehl | Exakter gemeldeter Befehl, Arbeitsverzeichnis, Ausführungsstatus und Exitcode |
-| Ausgabe | Fortlaufende stdout-/stderr-Ausgabe, getrennt erkennbar und unter Einhaltung der Puffergrenzen |
+| Ausgabe | Fortlaufende Ausgabe innerhalb der Puffergrenzen; stdout/stderr nur getrennt ausweisen, wenn die Quelle sie getrennt liefert |
 | Download | Tatsächlich bekannte Quelle, Zielpfad, Dateigröße/Fortschritt und gegebenenfalls Hash |
 | Dateiänderung | Betroffene Pfade, Änderungsart und verfügbare Diffs |
 | Freigabe | Beantragter Zugriff, ausstehende beziehungsweise getroffene Entscheidung und Ergebnis |
@@ -166,6 +172,18 @@ Die Details geben die tatsächlich bereitgestellten Werkzeugaufrufe und Ergebnis
 - Das eigene Ereignismodell enthält Aktivitätstyp, Status, Anzeigetext, Zeitangaben und verfügbare technische Details. Fehlende Upstream-Felder sind optional.
 - Ausgeklappte lange Listen und Ausgaben nachladen beziehungsweise virtualisieren; bestehende Speicher- und Streaminggrenzen bleiben wirksam.
 - Aufklappzustand und Leseposition gehören zum UI-Zustand, Freigaben und Ausführungsstatus bleiben ausschließlich durch den Backend-Snapshot bestimmt.
+
+### Formatierte Antworten und interaktive Elemente
+
+**Verbindlicher Umfang:** Assistentenantworten unterstützen live gerendertes Markdown einschließlich Überschriften, Absätzen, Fett-/Kursivschrift, Listen, Zitaten, sicheren Links, Inline-Code, Codeblöcken und echten Tabellen. Auch Benutzernachrichten können dieses Format nutzen; sie erhalten dadurch keine Ausführungsrechte. Vorgesehen sind `react-markdown` und `remark-gfm`, kompatibel zur gewählten Decky-/React-Version gepinnt. GFM ergänzt insbesondere Tabellen. Das ist eine eigene Rendererentscheidung; über ChatGPTs interne Implementierung wird keine Aussage getroffen. [Q14, Q15]
+
+Beim Streaming wird der empfangene Text gepuffert und gebündelt neu gerendert. Bereits abgeschlossene Blöcke sollen stabil bleiben. Eine noch unvollständige Tabellenzeile oder Codeblockbegrenzung darf vorübergehend als Text erscheinen und wird mit weiteren Daten korrekt formatiert. Keine Ausführung von MDX, JSX, Skripten, Raw-HTML oder modellgenerierten React-Komponenten. Renderer-Plugins und URL-Transformationen werden auf eine kleine geprüfte Auswahl begrenzt; eine Bibliothek allein garantiert nicht die Sicherheit jeder Erweiterung.
+
+Tabellen erhalten klare Kopfzeilen, dezente Zeilentrennung, konsistente Abstände und rechtsbündige Größenangaben. Dateinamen dürfen umbrechen, lange Pfade sind aufklappbar. Auf dem Deck sind wenige relevante Spalten sichtbar; weitere Details bleiben erreichbar. Breite Tabellen können per Controller und Touch horizontal gescrollt werden und werden nicht zu einer unstrukturierten Textliste. Sortierung und Zeilenauswahl sind für strukturierte Ergebnistabellen vorgesehen, nicht als notwendige Eigenschaft jeder Markdown-Tabelle.
+
+**Markdown formatiert Inhalte; Aktionen verwenden eigene validierte UI-Komponenten.** Fragekarten, Freigaben, Ergebnislisten mit Auswahl und Schaltflächen entstehen aus typisierten Backend-Daten. Ein Markdown-Link, eine Checkbox oder ein vom Modell erfundener Sondertag führt niemals einen Befehl aus. Das Frontend versteht nur registrierte Elementtypen, etwa `question`, `file_inventory` und `action_proposal`. Unbekannte Typen werden als nicht ausführbare Information behandelt. JSON-/Eventverträge werden versioniert; für das Modell stellt ein begrenztes Werkzeug diese Komponenten bereit. Beliebige Codeblöcke werden nicht als ausführbare UI-Daten interpretiert.
+
+So kann Codex eine Untersuchung verständlich erklären, deren Ergebnisse als echte Tabelle anzeigen und darunter „Dateien auswählen“, „Details ansehen“ oder „Auswahl löschen …“ vorschlagen. Die Auswahl stammt aus einem konkreten Backend-Ergebnis. Die abschließende Löschfreigabe ist ein zusätzlicher Schritt und wird nicht durch bloßes Auswählen erteilt.
 
 ### Bedienregeln
 
@@ -236,7 +254,10 @@ Die folgenden Namen sind bewusst eigene Projektverträge, keine behaupteten Deck
 | `send_message` | Chat-ID, Text, vom Client erzeugte Idempotenz-ID |
 | `interrupt_turn` | Konkreten laufenden Turn stoppen |
 | `answer_approval` | Lokale Freigabe-ID, Generation und zulässige Entscheidung |
-| `answer_question` | Antwort auf eine konkrete anstehende Rückfrage |
+| `answer_question` | Gebundene Frage-/Sitzungs-ID, Version und gewählte stabile Option-IDs |
+| `start_storage_scan`, `get_storage_scan`, `cancel_storage_scan` | Lesendes versioniertes Inventar mit Scanwurzeln, Ausschlüssen und Größenmetrik |
+| `propose_cleanup`, `confirm_cleanup` | Ergebnis-IDs auswählen; erneut geprüfte konkrete Aktion separat bestätigen |
+| `approve_privileged_action`, `cancel_privileged_action` | Konkreten Root-Auftrag steuern; keine Passwörter im normalen Chat-RPC |
 | `get_snapshot`, `get_events` | Zustand und Ereignisse nach einer Sequenznummer wiederherstellen |
 | `update_settings` | Validierte, erlaubte Einstellungen ändern |
 | `export_diagnostics` | Vom Nutzer angefordertes, redigiertes Diagnosepaket |
@@ -261,7 +282,9 @@ Anfangsgrenzen: 16 KiB Nachrichtentext, 1 MiB je einzelner Protokollzeile, 2 MiB
 | `idle` | Eingabe und Verlauf verfügbar |
 | `running` | Streaming anzeigen, Stoppen verfügbar, zweiten Turn verhindern |
 | `awaiting_approval` | Konkrete Freigabe darstellen, keine automatische Auflösung zugunsten der Ausführung |
-| `awaiting_input` | Auswahl oder Freitext für eine zugehörige Rückfrage |
+| `awaiting_input` | Erklärte Auswahlfrage mit gebundener Installer-Sitzung; keine automatische Standardantwort |
+| `awaiting_privilege` | Konkreter Root-Auftrag wartet auf ausdrückliche Freigabe |
+| `authenticating_privilege` | Separater lokaler Passwortdialog, keine Eingabe an Modell oder Installer |
 | `interrupting` | Weitere Eingabe bis zur bestätigten Unterbrechung sperren |
 | `disconnected` | Snapshot/Verbindung prüfen; keine Neuinstallation automatisch starten |
 | `limited` | Kontingent-/Modellfehler mit vom Dienst gemeldeten Details zeigen |
@@ -307,7 +330,8 @@ Besonders wichtig: Prüfen, ob freigegebene Ausführung außerhalb der Sandbox D
 | Benutzerinstallation / Änderung bestehender Dateien | Auswirkung und Befehl beziehungsweise Diff vor Ausführung bestätigen |
 | Heruntergeladenes Skript ausführen | Quelle, endgültige Downloadadresse, Dateihash und Ausführung anzeigen; keine automatische Zustimmung |
 | Löschen / Überschreiben | Konkrete Ziele und Wiederherstellbarkeit anzeigen, zusätzliche bewusste Bestätigung |
-| Root, SteamOS-Systembereich, Passwort-/Sicherheitsänderungen | Im MVP gesperrt, später eigener begrenzter Ablauf |
+| Root | Einzelnen Auftrag separat freigeben und frisch per Passwort authentifizieren |
+| SteamOS-Systembereich, Passwort-/Sicherheitsänderungen | Kein automatischer Standard; gesonderte Erklärung und konkrete Bestätigung |
 | Unbekannte Anfrage oder nicht darstellbare Berechtigung | Ablehnen und verständlich melden |
 
 Anfangs nur einmaliges Erlauben, Ablehnen oder Abbrechen. Keine dauerhaften Befehlspräfix-Freigaben, keine allgemeine Sitzungsfreigabe und keine automatischen Freigaben durch einen zweiten KI-Agenten.
@@ -318,7 +342,34 @@ Die Bestätigung eines Shellskripts autorisiert dessen gesamten angezeigten Ausf
 
 ### Wichtige Abgrenzung
 
-Der App Server meldet nur die Freigaben, die seine effektive Konfiguration tatsächlich auslöst. Eine nachträgliche Anzeige von `commandExecution`-Ereignissen kann die Ausführung nicht sicher blockieren. Vor der Aktivierung von Aktionen wird daher durch Negativtests bewiesen, dass verbotene Änderungen ohne Freigabe scheitern. Eine Regex-Liste gefährlicher Befehle oder eine Anweisung an das Modell reicht dafür nicht aus.
+Der App Server meldet nur die Freigaben, die seine effektive Konfiguration tatsächlich auslöst. Eine nachträgliche Anzeige von `commandExecution`-Ereignissen kann die Ausführung nicht sicher blockieren. Vor der Aktivierung von Aktionen wird daher durch Negativtests bewiesen, dass verbotene Änderungen ohne Freigabe scheitern. Eine Regex-Liste gefährlicher Befehle oder eine Anweisung an das Modell reicht dafür nicht aus. Für den nachfolgend ausdrücklich freigegebenen Root-Weg gelten eigene Grenzen: Ein Root-Prozess lässt sich durch die vorherige Benutzersandbox nicht auf dieselben Rechte beschränken.
+
+### Root-Aktionen mit ausdrücklicher Freigabe und Passwort
+
+**Aktualisierte Anforderung:** Einzelne Root-Aktionen gehören als optional aktivierbares und gesondert geprüftes Modul zum geplanten Produkt. Die bisherige pauschale Verschiebung auf eine spätere Version wird damit ersetzt. Decky-Backend und Codex laufen weiterhin als normaler Benutzer; eine dauerhafte Root-Shell ist nicht vorgesehen.
+
+Valve dokumentiert die Verwendung von sudo nach Einrichtung eines Benutzerpassworts. In der üblichen Konfiguration wird das Passwort des Linux-Benutzers benötigt, kein ChatGPT-Passwort und normalerweise kein separates Root-Passwort. Linux-Privilegierung und Codex-Sandboxfreigabe sind unterschiedliche Vorgänge: Eine Zustimmung in Codex erzeugt allein noch keine Root-Rechte. [Q11, Q13]
+
+1. Codex begründet den konkreten Root-Schritt und nennt erwartete Auswirkungen. Die Karte „Administratorrechte erforderlich“ zeigt den Befehl beziehungsweise das Skript und die bekannten Ziele.
+2. Nach ausdrücklicher Zustimmung erstellt der Privilegierungsbroker einen einmaligen Auftrag, gebunden an Chat/Turn, Befehl, Argumente, Arbeitsverzeichnis, Umgebung, Dateiidentität und Ablaufzeit. Änderungen am Ausführungsumfang benötigen eine neue Freigabe.
+3. Ein separater maskierter Passwortdialog übergibt die Eingabe ausschließlich an den lokalen Betriebssystem-Authentifizierungsweg. Das Passwort ist keine Chatnachricht und keine normale Antwort auf eine Installerfrage.
+4. Nur der freigegebene Auftrag wird als Root ausgeführt. Danach endet sein privilegierter Prozess; der nächste eigenständige Root-Auftrag erfordert erneut Zustimmung und frische Authentifizierung.
+
+**Technischer Ansatz:** Ein eigener lokaler Broker verwendet sudo mit dediziertem Askpass-Helfer. Der Auth-Kanal ist vom Runtime-Protokoll, Chat-Ereignisbus und Installer-stdin getrennt. sudo dokumentiert einen Askpass-Weg sowie das Ignorieren vorhandener Credentials bei einem einzelnen Aufruf, ohne dabei einen neuen Cache aufzubauen. Die passende Semantik wird für die tatsächlich installierte sudo-Version nachgewiesen. Kein dauerhaftes „sudo freischalten“, keine cacheauffrischende Hintergrundschleife, keine NOPASSWD-Regel. [Q11]
+
+Der Passwortdialog reagiert nur auf den identifizierten Askpass-Prozess eines gültigen Auftrags, niemals auf eine vom Installer ausgegebene Zeichenfolge „Password:“. Zugriffsbeschränkter kurzlebiger IPC-Kanal, Einmal-ID, Prozess-/Benutzerprüfung und Timeout sind verbindlich. Askpass-Ausgabe darf nicht in allgemeine Prozesslogs geraten. Keine Passwortübergabe über Argumente, Umgebungsvariablen, temporäre Textdateien, Modellwerkzeuge oder den Installer-Eingabestrom. Deshalb kein allgemeines `sudo -S` auf der Installer-PTY.
+
+Die Eingabe bleibt nur kurz im isolierten lokalen Dialog-/Authzustand und wird nach Verwendung verworfen. Sie gelangt weder in globale Chat-Stores noch in Verlauf, Export, Telemetrie, Debuglogs oder Modellkontext. Eine garantierte Speicherüberschreibung in JavaScript/Python und Schutz gegen einen bereits kompromittierten gleichen Benutzer oder Root werden nicht versprochen.
+
+Fehlendes Passwort, falsche Eingabe und Abbruch führen zu keiner Ausführung der angeforderten Aktion. Ein erstmaliges Einrichten des Linux-Passworts ist ein gesonderter bewusster Vorgang. Falls eine abweichende Systemrichtlinie keine tatsächliche Passwortabfrage verlangt, etwa NOPASSWD, oder andere Authentifizierung verlangt, bleibt dieser Passwortmodus gesperrt, bis der geforderte Ablauf unterstützt ist; kein dekorativer Dialog mit ungeprüfter Eingabe. Der privilegierte Runner führt vor einem nachweislich abgeschlossenen auftragsgebundenen Auth-Ablauf keine angeforderte Änderung aus und beendet sich bei fehlendem Nachweis. Diese zweistufige Übergabe ist zu testen, damit ein übersprungener Askpass-Aufruf nicht bereits den Installer startet. Polkit/pkexec ist eine Alternative nach Nachweis eines sichtbaren geeigneten Authentifizierungsagenten im Gaming-Modus, nicht ein vorausgesetzter Desktopdialog. [Q12]
+
+Der Runner muss die wirklich ausgeführten Dateien an die Freigabe binden, beispielsweise durch einen privilegiert erzeugten unveränderlichen Snapshot mit erneuter Hashprüfung. Ein vorab gehashtes, später noch veränderbares Benutzerskript genügt nicht. Auch ein kontrollierter Abbruch privilegierter Kindprozesse benötigt einen privilegierten Kontrollweg; das normale Backend kann Root-Prozesse nicht zuverlässig selbst beenden. Vorgesehen ist dafür ein kurzlebiger minimaler Runner mit begrenztem Kontrollkanal, kein ständig laufender Root-Dienst. Ein gegebenenfalls doch benötigter dauerhaft installierter Helfer erfordert zuvor ein eigenes Installations-/Update-/Entfernungskonzept.
+
+Ein vollständig als Root freigegebenes Fremdskript besitzt weitreichende Rechte einschließlich seiner Kindprozesse. Die Benutzer-Sandbox begrenzt diese Aktion nicht automatisch auf die genannten Zielpfade. Dies muss ausdrücklich angezeigt werden. Bevorzugt werden kleine bekannte Administratoraktionen und geprüfte Rezepte. Auch nachgeladener Code kann Teil eines Installers sein; Quelle und Hash sind keine Sicherheitsgarantie.
+
+Root hebt den SteamOS-Schreibschutz nicht automatisch auf. Ein nötiges Aufheben sowie Änderungen an Passwort-/Sicherheitskonfiguration werden niemals als unkritische Standardwahl behandelt. Sie verlangen eine zusätzliche konkrete Bestätigung samt Erklärung der Auswirkungen und möglicher Verluste bei SteamOS-Updates. [Q13]
+
+**Abnahme des Root-Moduls:** Frische Authentifizierung trotz sudo-Cache, kein neuer wiederverwendbarer Cache, falsches Passwort/Abbruch ohne ausgeführten Auftrag, kein Passwort in Chat/Logs/Installer-stdin, Abwehr nachgeahmter Passwortprompts, Dateiaustausch nach Freigabe, Auftragswechsel und Stoppen von Root-Kindprozessen prüfen. Bis dahin bleibt das Modul deaktiviert; andere Benutzerfunktionen bleiben verfügbar.
 
 ## 11. Installationsabläufe und EmuDeck-Beispiel
 
@@ -335,6 +386,36 @@ Der App Server meldet nur die Freigaben, die seine effektive Konfiguration tats�
 
 Der Assistent bleibt für freie Diagnosen und freigegebene Benutzerbefehle nutzbar. Für zuverlässig unterstützte Installationen entsteht zusätzlich ein kleiner, versionierter Rezeptkatalog mit Quelle, Plattform, Prüfverfahren, Interaktivität und Wiederaufnahmeinformationen. Eine unbekannte Anwendung wird nicht als bereits getestetes Rezept ausgegeben.
 
+### Interaktive Installer und erklärte Auswahlfragen
+
+**Verbindliche Anforderung:** Codex darf textbasierte Installer bidirektional bedienen. Es wählt unkritische Standards selbst und recherchiert die Auswirkungen relevanter Optionen, bevor es den Nutzer im Chat fragt. Installer-Ausführung ist damit mehr als ein Startprozess mit anschließendem Warten auf dessen Exitcode.
+
+| Installerentscheidung | Verhalten |
+| --- | --- |
+| Gewöhnlicher Installationspfad | Sinnvollen Standard anhand der Installationsart, Dokumentation und vorhandenen Dateien selbst wählen; im Aktivitätspanel kurz begründen |
+| Funktion X oder Y mit unterschiedlichen Folgen | Auswirkungen recherchieren, knapp erklären und Auswahl im Chat anbieten |
+| Kosten, Telemetrie, Cloudkonto, Lizenzannahme | Bewusste Nutzerentscheidung statt automatischem Ja |
+| Löschen, Überschreiben oder Formatieren | Ziele und Folgen konkret benennen, gesondert bestätigen |
+| Benutzer- gegenüber systemweiter Installation | Benutzerkontext bevorzugen, wenn er das Ziel erfüllt; nötige systemweite Änderung erklären und gegebenenfalls Root separat anfordern |
+| Unbekannte oder widersprüchliche Frage | Weiter recherchieren oder Unsicherheit erklären und nachfragen; nicht blind Enter senden |
+| Passwort/Zugangsdaten | Eigener geeigneter Geheimnisdialog, niemals Antwort des Modells auf einen Terminalprompt |
+
+Es gibt keinen einzigen Linux-Standardordner für alle Programme. Eine automatisch gewählte Pfadangabe muss zum Paketformat passen und darf weder vorhandene Daten überschreiben noch unerwartete Privilegierung oder eine bekannte abweichende Nutzerpräferenz übergehen. Inhaltliche Standardentscheidungen sind von notwendigen technischen Zugriffsfreigaben zu unterscheiden.
+
+**Fragekarte:** Bei einer relevanten Wahl steht im Aktivitätspanel „Deine Entscheidung erforderlich“. Direkt sichtbar im Chat folgen Erklärung, zwei oder mehr tatsächlich angebotene Möglichkeiten, kurze Auswirkungen und gegebenenfalls eine begründete Empfehlung. Quellen und zusätzliche Details sind aufklappbar; Unsicherheit wird kenntlich gemacht. Controller/Touch wählen stabile Option-IDs; Mehrfachauswahl oder Freitext sind nur zulässig, wenn die konkrete Frage dies erlaubt. Abbrechen ist jederzeit erreichbar. Nichtantworten wählt keine Option automatisch.
+
+Nach der Wahl wird die Entscheidung im Verlauf angezeigt. Das Backend übersetzt sie anhand des noch aktuellen Installerprompts in die konkrete Eingabe und sendet diese genau einmal. Frage-/Prompt-Version, Installer-Sitzung, Chat und Turn müssen übereinstimmen. Veraltete Karten, doppelte Klicks oder inzwischen beendete Prozesse erzeugen keine Eingabe. Keine zusätzlichen Zeilen oder Terminal-Steuerfolgen aus einer vermeintlich einfachen Auswahl übertragen.
+
+Codex prüft bevorzugt offizielle Dokumentation, Releasehinweise und mitgelieferte Hilfe. Bei Bedarf recherchiert es weiter, während der Installer wartet. Der Ablauf unterscheidet belegte Folgen, nachvollziehbare Ableitungen und Unbekanntes. Installer können intern Zeitlimits oder Sperren haben: „Wartet auf dich“ verspricht keine unbegrenzt sichere Pause. Nach Prozessende oder Neustart werden Zustand und Wiederanlauf zuerst geprüft.
+
+**Ausführungstechnik:** Eine PTY-Sitzung mit Streaming, stdin, Prozess-ID, Abbruch und gegebenenfalls Größenänderung ist vorgesehen. Die OpenAI Docs beschreiben sowohl explizite PTY-/stdin-Steuerung als auch strukturierte Rückfragen. Das verwandelt nicht automatisch jeden Shellprompt in eine Chatfrage, und eine explizite Prozess-API ist nicht mit jedem agenteneigenen Werkzeugaufruf gleichzusetzen. [Q2]
+
+Deshalb verwaltet ein eigener begrenzter Installationsdienst die Sitzungen und stellt Codex strukturierte Werkzeuge für Start, Ausgabe, erwartete Antwort, Fragekarte und Abbruch bereit, bevorzugt über einen privaten lokalen stdio-MCP-Dienst. Er verwendet die geeignete sandboxierte Runtime-Ausführung oder eine gleichwertig begrenzte eigene Ausführung; Root läuft ausschließlich über den separaten Broker. Keine direkte freie Host-Shell und kein unbemerkter Fallback auf experimentelle ungeschützte Prozessaufrufe. Native Codex-Rückfragen werden nach dem gepinnten Schema adaptiert; ein eigenes gebundenes Fragewerkzeug stellt die Oberfläche auch unabhängig davon bereit.
+
+Raw-Ausgabe und Anzeige werden getrennt. ANSI-/OSC-Steuersequenzen dürfen keine Zwischenablage ändern oder Links automatisch öffnen. PTY kann stdout und stderr zusammenführen; das UI darf keine sichere Trennung vortäuschen. Zielumfang sind zunächst Zeilenprompts und geprüfte einfache Menüs. Vollbild-TUIs und GUI-Installer benötigen eigene Adapter oder eine sichtbare Übergabe.
+
+Zusätzliche Sitzungszustände: laufend, Prompt erkannt, Folgen recherchieren, Nutzerwahl abwarten, Root-Freigabe abwarten, authentifizieren, fortsetzen und beendet/fehlgeschlagen/abgebrochen. Sie ergänzen den Turn-Zustand: Der Installer kann warten, während Codex recherchiert. Tests umfassen Prompt ohne Zeilenumbruch, automatischen sicheren Pfad, X/Y-Frage, Timeout, veraltete/doppelte Antworten, Wiederverbinden, mehrsprachige Ausgabe und Abbruch.
+
 ### „Installiere mir EmuDeck“
 
 EmuDeck ist ein späterer Referenzfall, nicht der erste Nachweis des Plugin-Grundgerüsts. Zunächst wird ein tatsächlich nichtinteraktiver Benutzerinstallationsfall validiert.
@@ -350,6 +431,35 @@ EmuDeck ist ein späterer Referenzfall, nicht der erste Nachweis des Plugin-Grun
 | Nachprüfen | Installation und gewählte Komponenten prüfen; fehlende Einrichtung separat ausweisen |
 
 Eine generische GUI-Steuerung wird durch die CLI nicht automatisch bereitgestellt. „Alles im Gaming-Modus“ bleibt für solche Installer ein zu erbringender Nachweis. ROMs, BIOS-Dateien und benutzerspezifische Emulatorkonfiguration werden nicht ungefragt heruntergeladen oder überschrieben. [Q9]
+
+### Referenzfunktion: große Dateien außerhalb von Steam-Spielen finden
+
+**Verbindlicher Anwendungsfall:** „Welche Dateien brauchen am meisten Platz, außer meinen über Steam installierten Spielen?“ erzeugt einen lesenden Scan, eine formatierte Tabelle und begründete optionale Aufräumvorschläge. Die Anfrage selbst erteilt keine Löschfreigabe.
+
+1. Tatsächliche Steam-Installation, Bibliotheken und eingehängte lokale Datenträger feststellen. Mehrere Bibliotheken sowie SD-Karten berücksichtigen; kein fester alleiniger Pfad unter `/home/deck`.
+2. Installierte Steam-Inhalte über lokale Bibliotheks-/App-Metadaten zuordnen, Pfade kanonisieren und gegen vorhandene Verzeichnisse prüfen. Ein lokaler VDF-/Appmanifest-Adapter ist ein versioniert zu testender Kompatibilitätsbaustein, keine hier behauptete stabile öffentliche API. Steamworks dokumentiert Installationsverzeichnisse pro App; ein beliebiger Decky-Prozess erhält dadurch nicht automatisch eine vollständig nutzbare Steamworks-Schnittstelle. [Q18]
+3. Ermittelte Spielverzeichnisse bei der Traversierung aussparen. Steam-verwaltete Downloads, Workshopdaten, Proton-Prefixe, Shader-Caches und Spielstände standardmäßig ebenfalls aus Löschvorschlägen heraushalten beziehungsweise als geschützte spielbezogene Kategorie ausweisen. Ein Prefix kann Spielstände enthalten und ist nicht pauschal entbehrlicher Cache.
+4. Bei unvollständigen oder beschädigten Bibliotheksdaten konservativ bekannte Steam-Bereiche aussparen und den Ausschluss als unvollständig melden. Unbekannt ist kein Nachweis, dass eine Datei gefahrlos löschbar wäre. Außerhalb von Steam installierte Spiele werden nicht stillschweigend als Steam-Installation klassifiziert; erkennbare Spielstände bleiben trotzdem geschützt.
+5. Zunächst freigegebene lesbare Benutzerverzeichnisse und ausgewählte lokale Datenträger untersuchen. Systembereiche nur nach zusätzlichem Zugriff, gegebenenfalls mit dem Root-Ablauf. `/proc`, `/sys`, `/dev`, kurzlebige Laufzeitdaten und Netzlaufwerke standardmäßig ausschließen. Keine Dokumentinhalte öffnen; Metadaten genügen für Größe und Pfad.
+6. Große Dateien nach belegtem Platz sortieren, mit nachvollziehbarer Größenanzeige. Falls nur logische Dateigröße ermittelt wurde, genau diese benennen. Hardlinks, Sparse-Dateien, Kompression/Reflinks und bereits offene gelöschte Dateien können die tatsächlich freisetzbare Menge verändern. Summen sind keine unbedingte Speichergewinnzusage.
+7. Fortschritt, Scanbereich, Ausschlüsse, Zugriffsfehler und Erfassungszeit zeigen. Scan abbrechbar und I/O-schonend ausführen; große Verzeichnisbäume nicht ungedrosselt während eines Spiels bearbeiten. Symlinks nicht beliebig verfolgen; Doppelzählung und Verlassen der erlaubten Wurzeln verhindern.
+
+#### Ergebnistabelle und Aktionsvorschlag
+
+Das Backend liefert einen unveränderlich referenzierten Scan mit Ergebnis-IDs, Pfad, Typ, Größe in Bytes, angezeigter Einheit, Kategorie, Erfassungszeit und bekanntem Risiko. Codex erklärt die Ergebnisse und nutzt für diese Funktion eine typisierte `file_inventory`-Tabelle; für gewöhnliche Antworten bleiben Markdown-Tabellen verfügbar. Bei Verzeichnissummen werden diese ausdrücklich als Verzeichnis gekennzeichnet, nicht als einzelne Datei ausgegeben.
+
+Beispiel ausschließlich mit erfundenen Daten, nicht aus einem tatsächlichen Gerätescan:
+
+| Name | Größe | Einordnung | Vorschlag |
+| --- | ---: | --- | --- |
+| `Programm-X-Installer.zip` | 2,4 GiB | Heruntergeladenes Archiv | Nach Prüfung der weiteren Verwendung zum Entfernen anbieten |
+| `Aufnahme.mp4` | 1,8 GiB | Persönliche Datei | Behalten oder bewusst auswählen; keine pauschale Löschempfehlung |
+
+Die produktive Tabelle hat gut lesbare Kopfzeilen, rechtsbündige Größen, aufklappbare vollständige Pfade und optional Auswahlkästchen. Unter der Tabelle bietet eine Aktionskarte etwa „Auswahl in den Papierkorb verschieben …“ an. Keine Vorauswahl persönlicher oder unbekannter Dateien, keine automatische Einstufung „sicher löschbar“ allein wegen Größe, Alter oder Dateiendung.
+
+Vor Ausführung zeigt die Freigabekarte konkrete Pfade, Anzahl, Zielaktion und geschätzten Effekt. Das Backend prüft Ergebnisidentität, aktuellen Dateityp/Pfad, Änderungszeit, Steam-Ausschlüsse und Berechtigung erneut. Änderungen seit dem Scan oder ein Pfadaustausch verlangen eine erneute Prüfung; die aus einer Modellantwort abgeschriebene Pfadzeichenfolge ist keine Ausführungsgrundlage. Schutz gegen Symlink-/Rename-Rennen benötigt eine an Verzeichnis-/Dateihandles gebundene Umsetzung; ein einzelner erneuter Pfadcheck allein genügt nicht.
+
+Bevorzugt wird der Papierkorb nach Prüfung der tatsächlichen Plattformunterstützung. Dabei bleibt der belegte Platz zunächst erhalten; freier Speicher wird erst durch endgültiges Entfernen freigegeben. Fehlt ein geeigneter Papierkorb oder müsste endgültig gelöscht werden, wird dies gesondert erklärt und bestätigt. System-/App-Dateien werden bevorzugt über den zuständigen Paketmanager entfernt; keine pauschale `rm -rf`-Bereinigung. Nach der Aktion meldet die Anwendung tatsächliches Ergebnis und nachgemessenen freien Platz. Root wird nur für den konkret zusätzlich notwendigen Schritt angefragt.
 
 ## 12. Persistenz und Datenschutz
 
@@ -368,6 +478,44 @@ Die Runtime bleibt Quelle der Gesprächsinhalte. Ein UI-Cache ist ersetzbar und 
 Standardgrenzen: Logs insgesamt höchstens 10 MiB; Staging-Warnung ab 500 MiB mit konfigurierbarer Obergrenze; fehlgeschlagene Downloadreste nach sieben Tagen zur Löschung anbieten. Nutzerverläufe werden niemals aufgrund einer Speichergrenze stillschweigend entfernt. Diagnoseexport erfolgt nur auf Nutzerwunsch und schließt Tokens sowie rohe Codex-Datenbanken aus.
 
 Die erste Einrichtung erklärt kurz: Modellanfragen gehen an OpenAI; freigegebene Dateiinhalte und Werkzeugausgaben können Teil des Modellkontexts werden. Lokale Speicherung bedeutet keine Offline-Inferenz. Keine zusätzliche Projekt-Telemetrie im MVP.
+
+### Mitgeliefertes Agentenwissen: AGENTS.md, Skills und SteamOS-Kontext
+
+Die Anwendung benötigt ein **versioniertes Runtime-Regelwerk**, das mit dem Plugin ausgeliefert und tatsächlich in jeden Codex-Kontext geladen wird. Eine irgendwo im Entwicklungsrepository abgelegte Markdown-Datei allein genügt dafür nicht. AGENTS-Anweisungen und Skills werden von Codex unterstützt; die genauen Suchpfade und Prioritäten werden anhand der gepinnten Runtime getestet. [Q16, Q17]
+
+Entwicklungsregeln und Produktrolle werden getrennt geplant:
+
+| Geplanter Quellpfad | Zweck und spätere Einbindung |
+| --- | --- |
+| `AGENTS.md` im Repository-Stamm | Hinweise für Entwickleragenten: Architektur, Tests, PRs, keine echten Hoständerungen in CI |
+| `agent/AGENTS.md` | Rolle des laufenden Steam-Deck-Assistenten; als verwaltete globale Anweisung im dedizierten CODEX_HOME laden |
+| `agent/skills/<name>/SKILL.md` | Aufgabenbezogene Anleitungen mit Name, Beschreibung und gezielt nachladbarem Inhalt |
+| `agent/skills/<name>/references/` | Gepflegte Quellen und SteamOS-/Werkzeughinweise mit Versionsbezug |
+| `agent/manifest.json` | Paketversion, Hashes, unterstützte Runtime, Skills und benötigte Werkzeuge |
+| `agent/references/sources.md` | Geprüfter Quellenkatalog; aktuelle Recherche ergänzen, keine beliebige Wiki-Kopie |
+
+Die Runtime-AGENTS.md beschreibt: „Du bist der lokale Assistenzdienst für das Steam Deck im Gaming-Modus“, Antworten auf Deutsch, kurze verständliche Erklärungen, Markdown-/Tabellennutzung, tatsächliche Ereignisse statt erfundener Ausführung und strukturierte Frage-/Aktionswerkzeuge. Sie enthält die Regeln zu sinnvollen Standards, relevanten Auswahlfragen, Steam-Spiel-Ausschlüssen, Löschbestätigung, Root-Aufträgen und geheimen Passwörtern. Sie verweist auf die Skills mit Auslöser und Zweck; umfangreiches Wissen wird nicht vollständig in jede Nachricht kopiert.
+
+| Geplanter Skill | Aufgabe |
+| --- | --- |
+| `steamos-basics` | SteamOS-Version und Benutzerumgebung erkennen; Home, Flatpak, Mounts, Schreibschutz und Updatefolgen erklären |
+| `steam-library-awareness` | Bibliotheken/Metadaten erkennen, installierte Steam-Spiele und spielbezogene Daten schützen |
+| `storage-audit` | Große Dateien lesend untersuchen, Einheiten und Scanlücken korrekt darstellen |
+| `safe-cleanup` | Ausgewählte Ergebnisse erneut prüfen, Papierkorb/Endgültiglöschen unterscheiden und Freigabe einholen |
+| `software-installation` | Offizielle Quellen, Paketwahl, Archivprüfung, Installer und Erfolgskontrolle |
+| `interactive-installation` | Prompt erkennen, Folgen recherchieren, strukturierte Fragekarte erzeugen und passende Antwort weitergeben |
+| `privileged-actions` | Notwendigkeit einer Root-Aktion begründen und Broker nutzen; keine Passwörter anfordern oder sehen |
+| `steamdeck-diagnostics` | Gezielte lokale Status-/Logprüfungen mit Datenschutz und begrenztem Kontext |
+
+Als Quellen dienen bevorzugt Valve-/Steam-Support, offizielle Flatpak-/Paket-/Anbieter-Dokumentation, die dokumentierten APIs und man-Seiten der wirklich vorhandenen Werkzeuge. Arch-Hinweise sind ergänzendes Wissen, keine automatische Aussage über unverändertes SteamOS. Jeder Eintrag benennt Quelle, Prüfdatum, Versionsbezug und Grenzen; bei veralteten oder widersprüchlichen Angaben recherchiert Codex neu.
+
+**Laden und Kontext:** Das Backend verifiziert das Agentenpaket und installiert/verknüpft es in den von der gewählten Runtime unterstützten isolierten Anweisungs-/Skill-Pfad. Die Liste verfügbarer Skills und benötigter Toolfähigkeiten wird geprüft. Ein dedizierter Workspace bleibt das Arbeitsverzeichnis; Codex startet nicht unbemerkt im Home-Verzeichnis oder in einem heruntergeladenen Repository. Fremde AGENTS.md-/SKILL.md-Dateien in Installern werden nicht automatisch als vertrauenswürdige Produktregeln übernommen. Die genaue Deaktivierung beziehungsweise Begrenzung fremder Discovery-Pfade ist ein Test-/Releasekriterium, kein behaupteter Effekt einer Markdown-Anweisung.
+
+Kritische Produktregeln werden zusätzlich als explizite Client-/Developer-Anweisungen und technische Backend-Prüfungen geführt. AGENTS.md und Skills können Verhalten anleiten, ersetzen aber weder Sandbox noch Freigabe- oder Passwortkontrolle. Erforderliche Sicherheitsabläufe dürfen deshalb nicht davon abhängen, ob das Modell einen Skill freiwillig auswählt. Bei fehlendem kritischen Regel-/Werkzeugpaket bleiben Aktionen gesperrt. Keine automatische Installation fremder Skills aus beliebigen GitHub-Repositories.
+
+Gerätekontext wird gezielt ergänzt: tatsächliche SteamOS-/Decky-/Runtime-Version, UID, Home, lokale Datenträger, Scanbereich und verfügbare Werkzeuge. Keine vollständige Umgebungsvariablen-, Passwort- oder Logsammlung im Prompt. Bestehende Chats speichern den verwendeten Regelpaketstand; nach einem Update werden die neuen Regeln kontrolliert auf fortgesetzte Chats angewandt. Eine Nutzerwahl kann als ausdrücklich gespeicherte Präferenz berücksichtigt werden, hebt aber Freigabegrenzen nicht auf.
+
+CI prüft Manifest/Hashes, gültige Skill-Metadaten und lokale Verweise, Paketinhalt sowie simuliertes Laden im dedizierten Profil. Versionierte Szenarien prüfen Formatierung, Steam-Ausschluss, Installer-Rückfrage und Root-Broker-Verwendung. Verhaltensprüfungen des Modells ergänzen harte Backend-Negativtests. Im aktuellen Planungs-Commit werden noch keine tatsächlichen AGENTS.md-/SKILL.md-Dateien angelegt.
 
 ## 13. GitHub Actions: Build und installierbare ZIP
 
@@ -416,6 +564,7 @@ Ein reiner Dokumentations-PR erhält Dokumentprüfungen; nach Aufbau des Projekt
 | `backend/` | Backendmodule ohne Test-/Entwicklungsdateien |
 | `bin/` | Vollständiges geprüftes Codex-Runtime-Bundle für Linux x86_64 |
 | `runtime/manifest.json` | Herkunft, Version, Hashes, Dateiliste und Schemabezug |
+| `agent/` | Geprüftes Runtime-Regel-/Skillpaket mit Manifest und Referenzen; keine Entwickler-AGENTS.md |
 | `LICENSE`, `THIRD_PARTY_NOTICES.md`, `licenses/` | Erforderliche Lizenzen und Hinweise |
 
 Nicht im Paket: `node_modules`, `.git`, Testdaten mit Geheimnissen, Quellkarten mit lokalen Pfaden, private Konfiguration, Anmeldedaten, Chats und Build-Caches. Etwaige notwendige Schemas oder Konfigurationsvorlagen werden explizit in die Dateiliste aufgenommen.
@@ -472,11 +621,14 @@ Das Plugin garantiert keine atomare Rücknahme einer Decky-eigenen Plugin-Instal
 | Streaming | Doppelte Ereignisse, Lücken, alte Generation, verspätete Deltas nach Abbruch, begrenzte Puffer |
 | Nachrichten | Doppelklick/Idempotenz, Timeout nach Versand, kein automatisches Wiederholen möglicher Änderungen |
 | Freigaben | Ablehnen, Timeout, doppelte/veraltete Antwort, falscher Chat, unbekannter Entscheidungstyp |
-| Sicherheit | Schreiben ohne Freigabe scheitert; Geheimnisdateien, Symlinks und geschützte Konfiguration bleiben gesperrt; keine Root-Vererbung |
-| Prozesse | Startfehler, Absturz, fehlende Runtime, Reload, Kindprozesse und Lock-Konflikte |
+| Sicherheit | Benutzerweg: Schreiben ohne Freigabe scheitert; geschützte Konfiguration und Geheimnisse bleiben gesperrt; keine Root-Vererbung. Expliziter Root-Weg: zusätzliche Auftrags-/Auth-Prüfungen statt behaupteter Fortgeltung der Benutzersandbox |
+| Prozesse | Startfehler, Absturz, fehlende Runtime, Reload, Kindprozesse und Lock-Konflikte; PTY-Prompts, stdin, Timeout und Root-Kindprozessabbruch |
+| Root-Auth | Frische Passwortabfrage trotz Cache; kein neuer Cache; falsches Passwort, Abbruch, NOPASSWD-Abweichung, Datei-/Auftragswechsel und kein Passwort in Modell/Logs/Installer-stdin |
+| Speicheranalyse | Mehrere Steam-Bibliotheken/SD, unvollständige Metadaten, geschützte Spieldaten, Hardlinks/Symlinks, Dateiaustausch, Scanabbrüche und Papierkorb ohne sofortigen Platzgewinn |
+| Agentenpaket | Tatsächliches Laden, Skillreferenzen, Hashes/Versionen, fremde AGENTS.md und technische Regeln trotz fehlender freiwilliger Skillwahl |
 | Auth | Abbruch, abgelaufener Code/Token, fehlender Tarifzugriff, Refreshfehler; keine Tokenwerte in Logs/Export |
 | Persistenz | Migration, schreibgeschütztes/volles Dateisystem, Wiederherstellung nach Absturz, tatsächliche Löschsemantik |
-| UI | Fokus, sichere Dialogdefaults, Sendesperre bei aktiver Aufgabe, Markdown-Inhalte ohne aktives HTML; Aktivitätspanel live auf-/zuklappen, Leseposition erhalten, Freigaben auch eingeklappt sichtbar, keine erfundenen Schritte |
+| UI | Fokus, sichere Dialogdefaults, Sendesperre; gestreamte Markdown-Tabellen mit unvollständigen Zeilen, große Tabellen, sichere URLs, unbekannte Aktionskarten, fehlendes aktives HTML; Aktivitätspanel, Leseposition und stets sichtbare Freigaben |
 | Paket | Dateiliste, Metadaten, Versionsgleichheit, Rechte und Bundle-Prüfsummen |
 
 Für Integrationstests wird ein kontrollierbarer App-Server-Simulator verwendet. Ein zusätzlicher echter lokaler Handshake validiert das Runtime-Protokoll ohne Modellanfrage. Echte OAuth-/Inference-Tests laufen manuell mit einem Testkonto und werden nicht mit Credentials im Repository automatisiert.
@@ -499,15 +651,19 @@ Jeder Schritt wird später als eigenes Issue und in überschaubaren PRs umgesetz
 | P1 | Repository und Decky-Grundgerüst | P0 | Plugin ohne KI lädt, Oberfläche bedienbar, keine Root-Rechte; Lockfiles und Lizenzbasis vorhanden |
 | P2 | Build, ZIP und PR-CI | P1 | CI prüft und erzeugt wirklich installierbare Skeleton-ZIP; Installation und Update am Gerät erfolgreich |
 | P3 | Prozess- und Protokolladapter | P1 | Start, Initialisierung, RPC, Streaming, Abbruch und Aufräumen mit Simulator und Runtime bestanden |
+| P3a | Runtime-Agentenwissen | P1, P3 | Mitgelieferte AGENTS.md und Skills im isolierten Kontext tatsächlich geladen; benötigte Werkzeuge und Versionen geprüft |
 | P4 | Konto und Modelle | P0, P3 | Zulässiger Login/Logout, Tokenablage, Modellabfrage und manueller echter Testturn |
-| P5 | Chat und Verlauf | P3, P4 | UI-Streaming mit dynamischem Aktivitätspanel und technischen Details, persistente Threads, Entwürfe, Wiederverbinden und Neustart funktionieren |
+| P5 | Formatierter Chat und Verlauf | P3a, P4 | Markdown/GFM-Tabellen, strukturierte Frage-/Aktionskarten, dynamisches Aktivitätspanel, persistente Threads und Wiederverbinden funktionieren |
 | P6 | Begrenzte Diagnose | P5 | Nützliche Lesebefehle; nicht freigegebene Datenzugriffe und Schreibversuche werden technisch verhindert |
 | P7 | Freigaben und Benutzeraktionen | P6 | Einmalige, konkret gebundene Freigaben und Dateidiffs; negative Sicherheitsprüfungen bestanden |
-| P8 | Unterstützte Installationen | P7 | Benutzer-Flatpak und ein weiterer geprüfter Weg; Erfolgskontrolle, Abbruch und Fehlerwiederaufnahme |
+| P7a | Interaktive Installer | P5, P7 | PTY, sichere Standardwahl, recherchierte X/Y-Fragen und einmalige gebundene Antwort bestanden |
+| P7b | Root-Aufträge mit Passwort | P7 | Broker und isolierter Auth-Kanal einschließlich Cache-/Negativtests und Root-Prozesskontrolle am Deck bestanden |
+| P7c | Speicheranalyse und Bereinigung | P3a, P5–P7 | Steam-Ausschlüsse, echte Ergebnistabelle, Auswahl, erneute Zielprüfung und getrennte Löschfreigabe bestanden |
+| P8 | Unterstützte Installationen | P7a; P7b für Root-Wege | Benutzer-Flatpak und ein weiterer interaktiver Weg; Erfolgskontrolle, Abbruch und Fehlerwiederaufnahme |
 | P9 | EmuDeck-Nachweis | P8 | Offizieller aktueller Ablauf getestet; Automatisierungsgrad und GUI-Übergabe präzise dokumentiert |
 | P10 | Stabilität und RC-Veröffentlichung | P2–P8 | Suspend, Reload, Ressourcen und Update geprüft; Draft-Release-Pipeline samt Assets funktioniert |
-| P11 | Stabile Version 1.0 | P10; P9 für beworbene EmuDeck-Unterstützung | Dokumentierte Kompatibilität, bestandene Deck-Abnahme und veröffentlichtes ZIP |
-| P12 | Erweiterte Systemverwaltung | Nach 1.0 | Separates Konzept für begrenzten privilegierten Helfer, Installationsrezepte und gegebenenfalls Store-Einreichung |
+| P11 | Stabile Version 1.0 | P10, P7a–P7c; P9 für beworbene EmuDeck-Unterstützung | Formatierung, Agentenwissen, Installerfragen, Speicheranalyse und optionales Root-Modul abgenommen; veröffentlichtes ZIP |
+| P12 | Erweiterte Systemverwaltung | Nach 1.0 | Weitere geprüfte Admin-Rezepte, Installeradapter und gegebenenfalls Store-Einreichung |
 
 P2 und P3 können nach P1 unabhängig bearbeitet werden. Alle anderen Abhängigkeiten sind vor Produktfreigabe einzuhalten. Falls P0 die Tarifanbindung oder sichere Aktionsausführung nicht bestätigt, wird der Umfang ausdrücklich angepasst; keine Umgehung durch Root-Rechte oder ungeschützte Ausführung.
 
@@ -545,6 +701,11 @@ P2 und P3 können nach P1 unabhängig bearbeitet werden. Alle anderen Abhängigk
 | Offizielle Kontoanmeldung | Vorhandenen Tarif nutzen, sofern zugelassen | OAuth-/Kontingentprüfung statt API-Key-Pflicht |
 | Codex-Bundle | Kein manuelles npm-/CLI-Setup auf dem Deck | Größere ZIP und gepflegtes Runtime-Manifest |
 | Begrenzte Freigaben | Kontrolle über Änderungen und Datenzugriffe | Sandboxnachweis und sichere Dialogzuordnung |
+| Markdown und Ergebnistabellen | Lesbare, vergleichbare Antworten | Sicherer Renderer plus validierte interaktive Komponenten |
+| Erklärte Installerfragen | Relevante X/Y-Entscheidungen direkt im Chat treffen | Recherche, PTY-Sitzung und gebundene Antwortübertragung |
+| Root mit Passwort | Benötigte Administratoraktionen ausführen | Separater Broker, frische Authentifizierung und konkrete Auftragsbindung |
+| Speicheranalyse | Große Dateien außerhalb von Steam-Spielen prüfen | Bibliothekserkennung, Metadateninventar und getrennte Bereinigungsfreigabe |
+| Mitgelieferte AGENTS.md/Skills | Steam-Deck-spezifisches, konsistentes Assistenzverhalten | Gepflegtes, tatsächlich geladenes und versioniertes Regelpaket |
 | Installationsrezepte | Wiederholbare Installation unterstützter Apps | Quellen- und Versionspflege pro Rezept |
 | GitHub-Build und Release-ZIP | Ein klarer, installierbarer Download | Paketprüfung und reale Deck-Abnahme |
 
@@ -563,4 +724,14 @@ Die Quellen wurden am 21. Oktober 2026 abgerufen. Externe Dokumentation und `mai
 - **Q9:** [EmuDeck – offizielle Installationsanleitung](https://manual.emudeck.com/install-guide/1_index/).
 - **Q10:** [Decky Loader – gemeldetes Problem mit abweichenden ZIP-Dateinamen, Issue 993](https://github.com/SteamDeckHomebrew/decky-loader/issues/993). Ein Issue ist ein Fehlerbericht, kein allgemeiner Schnittstellenvertrag.
 
+- **Q11:** [Sudo – offizieller Handbuch-Quelltext](https://github.com/sudo-project/sudo/blob/main/docs/sudo.man.in), insbesondere Askpass und Zeitstempel-Caches.
+- **Q12:** [Polkit – offizielles pkexec-Handbuch](https://polkit.pages.freedesktop.org/polkit/pkexec.1.html).
+- **Q13:** [Valve – Steam-Deck-Desktop-FAQ](https://help.steampowered.com/en/faqs/view/671a-4453-e8d2-323c), insbesondere sudo/Benutzerpasswort, Schreibschutz und Updates.
+- **Q14:** [react-markdown – offizielles Repository und Renderer-Dokumentation](https://github.com/remarkjs/react-markdown).
+- **Q15:** [remark-gfm – offizielle Dokumentation, insbesondere Tabellen](https://github.com/remarkjs/remark-gfm).
+- **Q16:** [OpenAI – Anweisungen mit AGENTS.md](https://developers.openai.com/codex/guides/agents-md).
+- **Q17:** [OpenAI – Skills erstellen und laden](https://learn.chatgpt.com/docs/build-skills).
+- **Q18:** [Valve – Steamworks ISteamApps, GetAppInstallDir](https://partner.steamgames.com/doc/api/ISteamApps#GetAppInstallDir). Kein Nachweis eines stabilen lokalen VDF-Formats oder freier API-Verfügbarkeit für dieses Plugin.
+
 Dieser Plan soll bei der Umsetzung fortgeschrieben werden, wenn ein Nachweis eine Annahme widerlegt. Neue Entscheidungen erhalten Begründung, betroffene Version und Auswirkung auf Umfang oder Sicherheit. Die zentrale Produktgrenze bleibt: eigenständige Hilfe mit technisch begrenzten Zugriffen und bewusster Freigabe relevanter Änderungen.
+
