@@ -1,0 +1,10 @@
+{
+  "name": "Decky Codex",
+  "author": "Kevni92",
+  "flags": [],
+  "api_version": 1,
+  "publish": {
+    "tags": ["assistant", "codex"],
+    "description": "Codex-Chat, Diagnose und freigegebene Aktionen direkt im Gaming-Modus."
+  }
+}

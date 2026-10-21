@@ -1,0 +1,7 @@
+{
+  "version": "0.163.0",
+  "platform": "x86_64-unknown-linux-musl",
+  "source": "@openai/codex@0.163.0-linux-x64",
+  "url": "https://registry.npmjs.org/@openai/codex/-/codex-0.163.0-linux-x64.tgz",
+  "integrity": "sha512-uwRaOsrYogLQhcxAM/GoeWrw0QIWEMRo7c9gM8sKAviVkZQHlu9kRLJ5PkufbV+ABGjyZgIwiFdJ0LCJ0N6e8w=="
+}
