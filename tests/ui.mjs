@@ -8,10 +8,10 @@ const { chromium } = require("playwright");
 const root = resolve(".");
 const server = createServer(async (req, res) => {
   try {
-    if (req.url === "/") { res.setHeader("Content-Type", "text/html"); res.end('<html><body style="margin:0"><div id="root"></div><script>window.process={env:{NODE_ENV:"production"}}</script><script src="/out/ui-host.js"></script></body></html>'); return; }
+    if (req.url === "/") { res.setHeader("Content-Type", "text/html; charset=utf-8"); res.end('<html><head><meta charset="utf-8"></head><body style="margin:0"><div id="root"></div><script>window.process={env:{NODE_ENV:"production"}}</script><script src="/out/ui-host.js"></script></body></html>'); return; }
     const path = resolve(root, "." + req.url);
     if (!path.startsWith(root + "/")) throw Error("path");
-    res.setHeader("Content-Type", "text/javascript"); res.end(await readFile(path));
+    res.setHeader("Content-Type", "text/javascript; charset=utf-8"); res.end(await readFile(path));
   } catch { res.statusCode = 404; res.end(); }
 });
 await new Promise(done => server.listen(0, "127.0.0.1", done));
