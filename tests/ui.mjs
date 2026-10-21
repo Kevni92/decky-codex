@@ -25,6 +25,8 @@ try {
   page.on("console", message => { if (message.type() === "error") console.error("Browser console:", message.text()); });
   page.on("requestfailed", request => console.error("Failed request:", request.url(), request.failure()));
   await page.goto(`http://127.0.0.1:${server.address().port}`);
+  await page.waitForTimeout(500);
+  console.log("Initial rendered DOM:", (await page.locator("body").innerText()).slice(0, 2500));
   await page.getByRole("heading", { name: "Speicherübersicht" }).waitFor();
   assert.equal(await page.getByRole("table").count(), 2);
   assert.equal(await page.locator("img").count(), 0);
