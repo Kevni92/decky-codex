@@ -116,6 +116,57 @@ Produktname: **Decky Codex**. Paketkennung: **decky-codex**. Verbindliche Paketv
 4. **Anmeldung:** Offizielle Zieladresse, gegebenenfalls QR-Code/Gerätecode, Ablauf-/Fehlerzustand und Abbrechen. Die konkrete Darstellung hängt vom zugelassenen OAuth-Verfahren ab.
 5. **Einstellungen:** Konto, Modell, Zugriffsprofil, Speicherverwaltung, Diagnoseexport und Versionen.
 
+### Dynamisches Aktivitätspanel im Chat
+
+**Verbindliche UI-Festlegung:** Die Chatansicht orientiert sich am dynamischen Verhalten von ChatGPT und Codex. Zwischen Nutzernachricht und abschließender Antwort erscheint ein kompaktes, standardmäßig eingeklapptes Aktivitätspanel. Dessen Kopf zeigt den aktuellen Arbeitsschritt in verständlicher Sprache. Der Chat besteht somit aus Nutzernachrichten, aufklappbaren Aktivitäten und fortlaufend eingeblendeten Antworten.
+
+Das Aktivitätspanel gehört zur jeweiligen Assistentenantwort beziehungsweise zum Turn. Es ist kein zusätzliches dauerhaftes Seitenfenster. Der Decky-Einstieg im Quick-Access-Menü bleibt davon getrennt.
+
+#### Darstellung im eingeklappten Zustand
+
+- Eine dezente, abgerundete Fläche im Steam-/Decky-Farbschema mit Statussymbol, kurzer Textzeile und Aufklappindikator.
+- Während der Arbeit dezente Animation; reduzierte Bewegung berücksichtigen. Kein dauerhaftes Blinken und keine großen springenden Ladeelemente.
+- Statusbeispiele: „Denkt nach …“, „Sucht nach der offiziellen Quelle …“, „Lädt den Installer herunter …“, „Installiert die Anwendung …“, „Prüft die Installation …“.
+- Der Text wird anhand tatsächlich empfangener Ereignisse aktualisiert. Falls die Runtime noch keine konkrete Aktivität meldet, ist „Wird verarbeitet …“ oder „Denkt nach …“ zulässig; keine erfundenen Such-, Download- oder Prüfschritte.
+- Nur bei messbaren Informationen einen Fortschrittswert zeigen, etwa übertragene Bytes. Keine simulierten Prozentanzeigen für Modellarbeit.
+- Nach Abschluss bleibt das Panel als „Aktivitäten abgeschlossen“ mit tatsächlicher Schrittzahl und Dauer aufklappbar. Bei Fehler oder Abbruch steht ausdrücklich „Fehlgeschlagen“ beziehungsweise „Abgebrochen“; vorhandene Teiländerungen werden sichtbar erwähnt.
+
+#### Darstellung im aufgeklappten Zustand
+
+Klick, Touch oder A öffnet eine chronologische Liste der vom System gemeldeten technischen Schritte. Der laufende Schritt ist hervorgehoben; abgeschlossene Schritte bleiben erhalten. Jeder Schritt zeigt Typ, kurze Bezeichnung und Status sowie, sofern verfügbar, Startzeit und Dauer.
+
+| Schrittart | Sichtbare technische Details |
+| --- | --- |
+| Recherche | Suchanfrage und gemeldete Quellen/URLs, soweit von der Runtime geliefert |
+| Befehl | Exakter gemeldeter Befehl, Arbeitsverzeichnis, Ausführungsstatus und Exitcode |
+| Ausgabe | Fortlaufende stdout-/stderr-Ausgabe, getrennt erkennbar und unter Einhaltung der Puffergrenzen |
+| Download | Tatsächlich bekannte Quelle, Zielpfad, Dateigröße/Fortschritt und gegebenenfalls Hash |
+| Dateiänderung | Betroffene Pfade, Änderungsart und verfügbare Diffs |
+| Freigabe | Beantragter Zugriff, ausstehende beziehungsweise getroffene Entscheidung und Ergebnis |
+| Fehler | Konkreter gemeldeter Fehler, betroffener Schritt und verbleibender Zustand |
+
+Die Details geben die tatsächlich bereitgestellten Werkzeugaufrufe und Ergebnisse wieder. Geheimnisse werden redigiert und Kürzungen kenntlich gemacht. Nicht gemeldete Daten werden als nicht verfügbar behandelt. „Exakte technische Schritte“ bedeutet nachvollziehbare Ausführung und Werkzeugausgabe; interne Modellgedanken werden weder benötigt noch als vollständig einsehbar versprochen. Falls die Runtime eine zur Anzeige bestimmte kurze Zusammenfassung liefert, kann diese ergänzend erscheinen.
+
+#### Live-Verhalten und Freigaben
+
+1. Nach dem Senden erscheint das Panel unmittelbar im Zustand „Wird verarbeitet …“.
+2. Statuswechsel, neue Schritte und verfügbare Ausgaben werden live in dasselbe Panel eingearbeitet. Deltas erzeugen keine neue Karte pro Textstück.
+3. Auf- und Zuklappen unterbricht die Aufgabe nicht. Der Zustand bleibt bei weiteren Ereignissen, erneutem Öffnen der Chatansicht und Wiederverbinden erhalten.
+4. Bei Freigabebedarf wechselt der Kopf zu „Bestätigung erforderlich“. Die konkrete Freigabekarte erscheint auch bei eingeklappten Details sichtbar im Chat; der Nutzer muss keine versteckten Logs durchsuchen.
+5. Eine ausstehende Freigabe wird nicht allein durch Aufklappen bestätigt. Erlauben/Ablehnen erfolgt über die getrennten, bereits definierten Freigabeschaltflächen.
+6. Die abschließende verständliche Antwort erscheint als eigener normaler Chattext. Währenddessen können Aktivitäten bereits abgeschlossen sein; der Gesamtstatus wird erst mit dem tatsächlichen Turn-Ende abgeschlossen.
+7. Neue Inhalte stehlen keinen Fokus. Im aufgeklappten Ausgabebereich bleibt die Leseposition erhalten; bei manuellem Zurückscrollen wird „Neue Ausgabe“ angeboten.
+
+#### Technische Konsequenzen für die spätere Umsetzung
+
+- Eine zentrale Aktivitätsdarstellung aus Turn-/Item-Ereignissen statt frei formulierter Statusmeldungen aus Logtext erzeugen.
+- Stabile Schritt-IDs zur Aktualisierung desselben Eintrags; verspätete oder doppelte Ereignisse nach den bereits festgelegten Sequenz-/Generationsregeln behandeln.
+- Zusammengehörige Schritte pro Turn gruppieren. Innerhalb eines Turns gegebenenfalls überlappende Werkzeugschritte als solche darstellen, ohne aus der Liste eine falsche strikt serielle Ausführung abzuleiten.
+- Kopfstatus aus offenen Freigaben, laufenden Werkzeugen und Turn-Zustand ableiten; bei mehreren aktiven Werkzeugen beispielsweise „Mehrere Schritte laufen …“ anzeigen.
+- Das eigene Ereignismodell enthält Aktivitätstyp, Status, Anzeigetext, Zeitangaben und verfügbare technische Details. Fehlende Upstream-Felder sind optional.
+- Ausgeklappte lange Listen und Ausgaben nachladen beziehungsweise virtualisieren; bestehende Speicher- und Streaminggrenzen bleiben wirksam.
+- Aufklappzustand und Leseposition gehören zum UI-Zustand, Freigaben und Ausführungsstatus bleiben ausschließlich durch den Backend-Snapshot bestimmt.
+
 ### Bedienregeln
 
 - Auf 1280 × 800 und am externen Bildschirm lesbar; keine Maus als Voraussetzung.
@@ -425,7 +476,7 @@ Das Plugin garantiert keine atomare Rücknahme einer Decky-eigenen Plugin-Instal
 | Prozesse | Startfehler, Absturz, fehlende Runtime, Reload, Kindprozesse und Lock-Konflikte |
 | Auth | Abbruch, abgelaufener Code/Token, fehlender Tarifzugriff, Refreshfehler; keine Tokenwerte in Logs/Export |
 | Persistenz | Migration, schreibgeschütztes/volles Dateisystem, Wiederherstellung nach Absturz, tatsächliche Löschsemantik |
-| UI | Fokus, sichere Dialogdefaults, Sendesperre bei aktiver Aufgabe, Markdown-Inhalte ohne aktives HTML |
+| UI | Fokus, sichere Dialogdefaults, Sendesperre bei aktiver Aufgabe, Markdown-Inhalte ohne aktives HTML; Aktivitätspanel live auf-/zuklappen, Leseposition erhalten, Freigaben auch eingeklappt sichtbar, keine erfundenen Schritte |
 | Paket | Dateiliste, Metadaten, Versionsgleichheit, Rechte und Bundle-Prüfsummen |
 
 Für Integrationstests wird ein kontrollierbarer App-Server-Simulator verwendet. Ein zusätzlicher echter lokaler Handshake validiert das Runtime-Protokoll ohne Modellanfrage. Echte OAuth-/Inference-Tests laufen manuell mit einem Testkonto und werden nicht mit Credentials im Repository automatisiert.
@@ -449,7 +500,7 @@ Jeder Schritt wird später als eigenes Issue und in überschaubaren PRs umgesetz
 | P2 | Build, ZIP und PR-CI | P1 | CI prüft und erzeugt wirklich installierbare Skeleton-ZIP; Installation und Update am Gerät erfolgreich |
 | P3 | Prozess- und Protokolladapter | P1 | Start, Initialisierung, RPC, Streaming, Abbruch und Aufräumen mit Simulator und Runtime bestanden |
 | P4 | Konto und Modelle | P0, P3 | Zulässiger Login/Logout, Tokenablage, Modellabfrage und manueller echter Testturn |
-| P5 | Chat und Verlauf | P3, P4 | UI-Streaming, persistente Threads, Entwürfe, Wiederverbinden und Neustart funktionieren |
+| P5 | Chat und Verlauf | P3, P4 | UI-Streaming mit dynamischem Aktivitätspanel und technischen Details, persistente Threads, Entwürfe, Wiederverbinden und Neustart funktionieren |
 | P6 | Begrenzte Diagnose | P5 | Nützliche Lesebefehle; nicht freigegebene Datenzugriffe und Schreibversuche werden technisch verhindert |
 | P7 | Freigaben und Benutzeraktionen | P6 | Einmalige, konkret gebundene Freigaben und Dateidiffs; negative Sicherheitsprüfungen bestanden |
 | P8 | Unterstützte Installationen | P7 | Benutzer-Flatpak und ein weiterer geprüfter Weg; Erfolgskontrolle, Abbruch und Fehlerwiederaufnahme |
