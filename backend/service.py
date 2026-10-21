@@ -105,7 +105,10 @@ class Service:
         # Workspace guidance is controlled; downloaded files never become its root.
         shutil.copyfile(source / "AGENTS.md", self.workspace / "AGENTS.md")
         self.agent_text = (source / "AGENTS.md").read_text()
-        paths = [self.root, self.codex_home, self.home / ".ssh", self.home / ".gnupg",
+        # Runtime helpers must remain readable/executable inside their own sandbox.
+        # Protect credentials and session stores, not the public binary/skill tree.
+        paths = [self.codex_home / name for name in ("auth.json", "config.toml", "sessions", "archived_sessions", "history.jsonl", "*.sqlite*", "logs")]
+        paths += [self.home / ".ssh", self.home / ".gnupg",
                  self.home / ".aws", self.home / ".codex", self.home / ".mozilla",
                  self.home / ".config/google-chrome", self.home / ".config/chromium",
                  self.home / ".local/share/keyrings"]
