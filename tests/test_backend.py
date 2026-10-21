@@ -3,13 +3,15 @@ import json
 import os
 import sys
 import tempfile
+import struct
+from types import SimpleNamespace
 import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 from backend.protocol import CodexClient
 from backend.service import Service, TOOLS
 from backend.storage import Inventory, steam_exclusions, vdf
-from backend.privilege import sealed, child_of
+from backend.privilege import RootJob, sealed, child_of
 from backend.processes import Session, clean_output
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -168,6 +170,40 @@ class StorageTests(unittest.TestCase):
 
 
 class LocalProcessTests(unittest.IsolatedAsyncioTestCase):
+    async def test_no_password_auth_cannot_authorize_root_runner(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            password = AsyncMock(return_value="never-requested")
+            job = RootJob(ROOT, Path(tmp), {}, lambda: None, password)
+            job.session = SimpleNamespace(process=SimpleNamespace(pid=os.getpid()))
+            reader = asyncio.StreamReader()
+            reader.feed_data((json.dumps({"role": "runner", "token": job.token}) + "\n").encode())
+            reader.feed_eof()
+            class Writer:
+                def __init__(self): self.output = b""
+                def get_extra_info(self, _): return self
+                def getsockopt(self, *_): return struct.pack("3i", os.getpid(), 0, 0)
+                def write(self, data): self.output += data
+                async def drain(self): pass
+                def close(self): pass
+            writer = Writer()
+            await job._connection(reader, writer)
+            self.assertEqual(json.loads(writer.output), {"authorized": False})
+            password.assert_not_called()
+
+    async def test_root_script_frozen_before_user_approval(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            script = Path(tmp) / "installer.sh"
+            script.write_text("echo original")
+            job = RootJob(ROOT, Path(tmp), {}, lambda: None, AsyncMock())
+            try:
+                details = job.prepare(["bash", str(script)], Path(tmp))
+                script.write_text("echo changed")
+                self.assertEqual(os.pread(job.fds[0], 100, 0), b"echo original")
+                self.assertIn("SHA-256", details)
+                self.assertNotEqual(job.argv[1], str(script))
+            finally:
+                await job.close()
+
     async def test_real_pty_bidirectional_input(self):
         session = await Session.start([sys.executable, "-u", "-c", "print('Choice?', flush=True); print('got:'+input(), flush=True)"], ROOT, os.environ.copy(), lambda: None)
         try:
