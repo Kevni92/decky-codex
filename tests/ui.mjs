@@ -28,24 +28,81 @@ try {
   await page.waitForTimeout(500);
   console.log("Initial rendered DOM:", (await page.locator("body").innerText()).slice(0, 2500));
   await page.getByRole("heading", { name: "Speicherübersicht" }).waitFor();
-  assert.equal(await page.getByRole("table").count(), 2);
+  assert.equal(await page.getByRole("table").count(), 1);
   assert.equal(await page.locator("img").count(), 0);
+  const tableContrast = await page.locator("td, th").evaluateAll(cells => {
+    const rgb = color => color.match(/[\d.]+/g).map(Number);
+    const luminance = color => color.slice(0, 3).map(v => { v /= 255; return v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; }).reduce((sum, v, i) => sum + v * [.2126, .7152, .0722][i], 0);
+    const background = element => {
+      const color = rgb(getComputedStyle(element).backgroundColor), alpha = color[3] ?? 1;
+      if (alpha === 1) return color;
+      const parent = element.parentElement ? background(element.parentElement) : [255, 255, 255];
+      return color.slice(0, 3).map((value, index) => value * alpha + parent[index] * (1 - alpha));
+    };
+    return cells.map(cell => {
+      const fg = luminance(rgb(getComputedStyle(cell).color)), bg = luminance(background(cell));
+      return (Math.max(fg, bg) + .05) / (Math.min(fg, bg) + .05);
+    });
+  });
+  assert.ok(tableContrast.every(value => value >= 4.5), "Table cells must have readable contrast");
+  assert.equal(await page.locator("textarea").count(), 0);
+  assert.equal(await page.getByRole("button", { name: /Große Dateien untersuchen|Scan stoppen|Auswahl in Papierkorb/ }).count(), 0);
+  assert.equal(await page.getByRole("combobox").count(), 0);
+  assert.equal(await page.getByText("Exakter Werkzeugschritt: 42 Dateien geprüft").count(), 0);
+  await page.screenshot({ path: "out/ui-chat.png" });
   await page.getByRole("button", { name: /Aktivitäten – technische Details/ }).click();
   await page.getByText("Exakter Werkzeugschritt: 42 Dateien geprüft").waitFor();
-  await page.getByRole("button", { name: "☐", exact: true }).click();
-  assert.equal(await page.evaluate(() => window.__test.calls.filter(c => c.method === "cleanup").length), 0);
-  await page.getByRole("button", { name: "Auswahl in Papierkorb …" }).click();
-  await page.getByRole("heading", { name: "Auswahl in den Papierkorb verschieben?" }).waitFor();
-  await page.getByRole("button", { name: "Abbrechen / Ablehnen" }).click();
+  await page.getByRole("button", { name: /Aktivitäten – technische Details/ }).click();
+  const input = page.getByRole("textbox", { name: "Nachricht an Codex", exact: true });
+  assert.equal(await input.getAttribute("data-native-steam-field"), "true");
+  await input.click();
+  await input.fill("Installiere Programm X");
+  await input.press("Enter");
+  assert.equal(await page.evaluate(() => window.__test.keyboardActivations > 0), true);
+  assert.equal(await page.evaluate(() => window.__test.calls.some(c => c.method === "send")), false);
+  await page.getByRole("button", { name: "Einstellungen", exact: true }).click();
+  await page.getByRole("heading", { name: "Einstellungen", exact: true }).waitFor();
+  assert.equal(await page.evaluate(() => window.__test.path), "/decky-codex/settings");
+  assert.equal(await page.getByRole("textbox", { name: "Nachricht an Codex", exact: true }).count(), 0);
+  assert.equal(await page.getByRole("heading", { name: "Speicherübersicht" }).count(), 0);
+  assert.equal(await page.getByRole("complementary", { name: "Chats und Navigation" }).count(), 0);
+  await page.getByRole("combobox", { name: "Modell", exact: true }).selectOption("other");
+  await page.screenshot({ path: "out/ui-settings.png" });
+  // A request arriving while settings are open remains discoverable.
   await page.evaluate(() => window.__test.request("question"));
-  await page.getByRole("button", { name: "Lokale Installation", exact: true }).click();
+  await page.getByRole("button", { name: "Entscheidung öffnen", exact: true }).click();
+  await page.getByRole("heading", { name: "X oder Y?" }).waitFor();
+  assert.equal(await input.inputValue(), "Installiere Programm X");
+  await page.getByRole("button", { name: /Lokale Installation/ }).click();
   assert.equal(await page.evaluate(() => window.__test.calls.filter(c => c.method === "resolve").at(-1).params.choice), "x");
+  // Draft recovery and one explicit send through the native control.
+  await page.evaluate(() => { window.__test.failSend = true; });
+  await page.getByRole("button", { name: "Nachricht senden", exact: true }).click();
+  await page.getByRole("alert").filter({ hasText: "Senden fehlgeschlagen" }).waitFor();
+  assert.equal(await input.inputValue(), "Installiere Programm X");
+  await page.evaluate(() => { window.__test.failSend = false; });
+  await input.press("Control+Enter");
+  await page.getByText("Installiere Programm X", { exact: true }).waitFor();
+  assert.equal(await input.inputValue(), "");
+  assert.equal(await page.evaluate(() => window.__test.calls.filter(c => c.method === "send").at(-1).params.model), "other");
+  assert.equal(await page.evaluate(() => window.__test.calls.some(c => ["scan", "cleanup", "cancel_scan"].includes(c.method))), false);
   await page.evaluate(() => window.__test.request("password"));
   const password = page.getByLabel("Linux-Benutzerpasswort", { exact: true });
   assert.equal(await password.getAttribute("type"), "password");
   await password.fill("not-a-real-password");
   await page.getByRole("button", { name: "Authentifizieren", exact: true }).click();
   assert.equal(await page.evaluate(() => JSON.stringify(window.__test.state).includes("not-a-real-password")), false);
+  await page.getByRole("button", { name: "Neuer Chat", exact: true }).click();
+  await page.getByRole("heading", { name: "Wobei kann ich dir helfen?", exact: true }).waitFor();
+  await page.screenshot({ path: "out/ui-empty.png" });
+  // Steam Deck 720p layout: no document overflow; composer stays in view.
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.getByRole("button", { name: "Seitenleiste einklappen", exact: true }).click();
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= 1280 && document.documentElement.scrollHeight <= 720), true);
+  const composerBox = await input.boundingBox();
+  assert.ok(composerBox.y >= 40 && composerBox.y + composerBox.height <= 720 - 28);
+  await page.getByRole("button", { name: "Seitenleiste öffnen", exact: true }).click();
+  await page.setViewportSize({ width: 1280, height: 800 });
   assert.deepEqual(errors, []);
   // A dead Decky backend must stop showing the indefinite connection screen.
   await page.goto(`http://127.0.0.1:${server.address().port}/?transport=hang`);
@@ -64,5 +121,5 @@ try {
   assert.deepEqual(errors, []);
   console.log("Backend startup: stalled transport times out, import errors are visible, reconnect recovers without mutation");
   await page.screenshot({ path: "out/ui-preview.png", fullPage: true });
-  console.log("Rendered compiled plugin: tables, HTML safety, activity panel, choices, cleanup confirmation and masked password passed");
+  console.log("Rendered compiled plugin: chat layout, native Steam input contract, separate settings route, draft recovery, model selection, choices, password isolation and viewport layout passed");
 } finally { await browser.close(); server.close(); }

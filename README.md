@@ -17,11 +17,12 @@ ChatGPT-Konto. Es gelten dessen Kontingente; keine automatische API-Abrechnung.
 
 ## Funktionen
 
-- Gestreamter deutscher Chat mit Markdown, Tabellen und aufklappbaren Aktivitäten.
+- Aufgeräumter deutscher Chat mit Seitenleiste, Markdown, Tabellen und aufklappbaren Aktivitäten.
+- Eigene Einstellungsseite für Konto, Modell und Freigaben; native Steam-Texteingabe.
 - Lokaler Verlauf, Titel, neue Chats und echte Codex-Verlaufslöschung.
 - Auswahlfragen mit erklärten Optionen; Installer mit fortlaufender Ausgabe und Eingaben.
-- Große Dateien untersuchen, bekannte Steam-Bibliotheken/Spieldaten ausschließen und
-  ausgewählte Dateien nach Bestätigung in den Papierkorb verschieben.
+- Aufgaben wie „Welche Dateien brauchen am meisten Platz?“ direkt im Chat stellen.
+  Codex kann Ergebnisse als Tabelle darstellen und Aufräumvorschläge gesondert bestätigen lassen.
 - Hostbefehle einzeln freigeben. Root-Aufträge zusätzlich mit lokalem Linux-Passwort.
 - Mitgelieferte AGENTS.md und sechs auf Steam Deck zugeschnittene Skills.
 
@@ -73,3 +74,18 @@ zehn Sekunden erscheint bei fehlender Backend-Antwort eine Fehlermeldung mit
 `~/homebrew/logs/Decky Codex/` protokolliert (bei abweichendem Decky-Verzeichnis
 entsprechend dort). Für einen Fehlerbericht genügt zunächst der angezeigte
 Fehlertext; keine Anmeldedateien oder Passwörter weitergeben.
+
+## Bedienung
+
+- Die Seitenleiste enthält neue und gespeicherte Chats. „Alle Chats“ öffnet die Verwaltung.
+- Im nativen Steam-Eingabefeld A drücken bzw. das Feld antippen, um Steams Tastatur
+  aufzurufen. Gesendet wird mit der Pfeil-Schaltfläche oder Strg + Enter; das Schließen
+  der Tastatur sendet keine Nachricht. Die Standard-Eingabe ist einzeilig.
+- „Einstellungen“ öffnet eine eigene Seite. Ein Chatentwurf bleibt beim Wechsel erhalten.
+- Aktivitäten und Terminalausgaben öffnen sich erst auf Wunsch im Gespräch.
+- Es gibt keinen eigenen Datei-Manager und keine feste Scan-Schaltfläche. Speicheranalyse
+  ist eine normale Codex-Aufgabe; Ergebnisse stehen in der Chatantwort.
+
+Die native Texteingabe wird durch Steams TextField-Komponente bereitgestellt. CI prüft
+Rendern, Fokus-/Eingabevertrag und den Chatablauf in einer simulierten Decky-Umgebung;
+das tatsächliche Öffnen der Steam-Tastatur muss am Gerät bestätigt werden.
