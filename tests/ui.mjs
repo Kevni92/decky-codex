@@ -79,7 +79,7 @@ try {
   assert.ok(await page.locator(".dc-transcript").evaluate(el => el.scrollTop < 300));
   const scrollBefore = await page.locator(".dc-transcript").evaluate(el => el.scrollTop);
   await page.evaluate(() => window.__test.analog(0, 47, 1, 0, -1));
-  assert.ok(await page.locator(".dc-transcript").evaluate(el => el.scrollTop > scrollBefore));
+  assert.ok((await page.locator(".dc-transcript").evaluate(el => el.scrollTop)) > scrollBefore);
   await page.evaluate(text => { window.__test.state.chat.messages[1].text = text; window.__test.publish(); }, original);
   await page.waitForTimeout(100);
   await page.screenshot({ path: "out/ui-chat.png" });

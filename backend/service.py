@@ -111,7 +111,7 @@ class Service:
         # Runtime helpers must remain readable/executable inside their own sandbox.
         # Protect credentials and session stores, not the public binary/skill tree.
         paths = [self.codex_home / name for name in ("auth.json", "config.toml", "sessions", "archived_sessions", "history.jsonl", "*.sqlite*", "logs")]
-        paths += [self.home / ".ssh", self.home / ".gnupg",
+        paths += [self.data / "voice", self.home / ".ssh", self.home / ".gnupg",
                  self.home / ".aws", self.home / ".codex", self.home / ".mozilla",
                  self.home / ".config/google-chrome", self.home / ".config/chromium",
                  self.home / ".local/share/keyrings"]

@@ -35,7 +35,7 @@ window.__test = {
 let activeKeyboard = null;
 window.SteamClient = { Input: { RegisterForControllerAnalogInputMessages(fn) { window.__test.analog = fn; return { unregister() { window.__test.analog = null; } }; } } };
 const manager = {
-  get IsShowingVirtualKeyboard() { return window.__test.keyboardOpen; },
+  get IsShowingVirtualKeyboard() { return { Value: window.__test.keyboardOpen }; },
   CreateVirtualKeyboardRef(props) {
     const ref = {
       SetAsCurrentVirtualKeyboardTarget() { activeKeyboard = ref; window.__test.keyboardProps = props; window.__test.keyboardRef = ref; },

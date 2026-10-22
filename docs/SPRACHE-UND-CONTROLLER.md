@@ -26,7 +26,8 @@ mono, PCM16; maximal 30 Sekunden / 960.000 Bytes. Kein Root und kein Shell-Aufru
 Die Aufnahme liegt begrenzt im RAM; erst für die Erkennung entsteht eine private
 WAV-Datei im privaten Datenverzeichnis. Temporäre WAV und Textausgabe werden bei
 Erfolg, Abbruch oder Fehler entfernt. Kein Audio wird ins Chatarchiv, Snapshot,
-Modell oder Protokoll übernommen. Erkennungstext wird nur an die anfragende UI
+Modell oder Protokoll übernommen. Das Audioverzeichnis ist zusätzlich in Codex’
+Dateisystemrechten gesperrt. Erkennungstext wird nur an die anfragende UI
 zurückgegeben, dort zum Entwurf ergänzt und erst beim Senden gespeichert.
 
 RPCs: `voice_start`, `voice_status`, `voice_finish`, `voice_cancel`. Zufällige
@@ -52,7 +53,7 @@ Rechter Stick: Steams `RegisterForControllerAnalogInputMessages`, Aktion
 `GAMEPAD_ANALOG_SCROLL` (47), wird direkt zum sichtbaren Transkript bzw. Verlauf
 geleitet. Unterstützt aktuellen Callback `(controller, action, pressed, x, y)` und
 ältere Batch-Nachrichten. Kein globales Remapping oder Tastatur-Actionset-Wechsel.
-Ohne natives Abonnement gibt es einen Standard-Gamepad-API-Fallback (rechte Y-Achse,
+Ohne kürzliches natives Scrollsignal gibt es einen Standard-Gamepad-API-Fallback (rechte Y-Achse,
 Totzone 0,2, zeitbasierte Geschwindigkeit). Bei Tastatur/Dialogen, versteckter Seite
 und nach Route-Unmount wird nicht gescrollt. Abonnements werden abgemeldet.
 Der Scroll-Hook respektiert die vorhandene Auto-Follow-Steuerung des Chats.

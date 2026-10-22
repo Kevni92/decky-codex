@@ -31,7 +31,7 @@ async def stop_process(process):
 
 class Dictation:
     def __init__(self, root, data, env):
-        self.root, self.data, self.env = Path(root), Path(data), env
+        self.root, self.data, self.env = Path(root), Path(data) / "voice", env
         self.lock = asyncio.Lock()
         self.token = None
         self.state = "idle"
@@ -67,11 +67,15 @@ class Dictation:
             recorder = shutil.which("pw-record", path=self.env()["PATH"])
             if not recorder:
                 raise ValueError("PipeWire-Aufnahme fehlt (pw-record). Mikrofon bitte in den Steam-Audioeinstellungen prüfen.")
+            self.data.mkdir(parents=True, exist_ok=True, mode=0o700)
+            os.chmod(self.data, 0o700)
             self.audio.clear()
             self.error = self.text = ""
+            capture_env = self.env()
+            capture_env.setdefault("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
             self.capture = await asyncio.create_subprocess_exec(
                 recorder, "--raw", "--rate=16000", "--channels=1", "--format=s16", "-",
-                env=self.env(), stdin=asyncio.subprocess.DEVNULL,
+                env=capture_env, stdin=asyncio.subprocess.DEVNULL,
                 stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
             self.token = uuid.uuid4().hex
             self.started = self.seen = time.monotonic()
