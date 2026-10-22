@@ -9,3 +9,7 @@ runtime/installed.json
 schemas/generated/
 licenses/frontend.txt
 docs/PLAN_CURRENT_REMOTE.md
+runtime/voice-installed.json
+licenses/whisper.cpp-MIT.txt
+licenses/ggml-MIT.txt
+licenses/Whisper-model-MIT.txt
