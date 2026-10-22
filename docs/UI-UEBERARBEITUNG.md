@@ -47,3 +47,34 @@ Ein weiterer Layouttest prüft 1280 × 720 und eingeklappte Navigation.
 Die simulierte TextField-Komponente prüft den Eingabevertrag, keine echte Steam-Tastatur.
 Controller, Steam-Styles und Bildschirmtastatur müssen weiterhin auf dem Steam Deck
 abgenommen werden. Die vorherigen Gerätecode- und Backend-Startkorrekturen bleiben bestehen.
+
+## Korrektur nach weiterem Gerätetest
+
+Die frühere Regel `.dc-native-input [class*="Label"]` traf auch Steams
+`DialogInputLabelGroup` und `DialogRequirementLabel`. Damit wurde die gesamte
+Eingabe versteckt; nur der separate Platzhalter blieb sichtbar. Der Selektor
+adressiert jetzt ausschließlich das einzelne `.DialogLabel`-Element.
+Der Testhost bildet diese echten Steam-Wrapper ab und prüft die Sichtbarkeit
+und echte Texteingaben statt nur eines vereinfachten Input-Mocks.
+
+Ein eigenes Tastatursymbol und Fokus/A/Touch öffnen über den zum Input-Dokument
+gehörenden `WindowStore` eine `CreateVirtualKeyboardRef`. Es werden weder ein
+HTML-Element an `ShowVirtualKeyboard` übergeben noch Tasten simuliert. Die
+Tastaturzeichen werden über `onTextEntered` gezielt in das aktive lokale Feld
+übernommen. Damit ist keine zurückgekehrte OS-Fokussierung nach einer Spielsitzung
+nötig. Fertig schließt die Tastatur und sendet keine Chatnachricht. Verdeckte,
+entfernte oder deaktivierte Eingabefelder nehmen keine nachlaufenden Zeichen an.
+Das Linux-Passwort nutzt ausdrücklich den nativen Input-Typ `password`.
+
+Referenz für den geprüften Steam-Vertrag: SteamTracking/SteamTracking,
+`ClientExtracted/steamui/sp.js`, `CreateVirtualKeyboardRef`, `ShowVirtualKeyboard`
+und `DispatchKeypress`; ergänzend SteamDeckHomebrew/decky-frontend-lib
+`src/components/TextField.ts`. Diese privaten Steam-Schnittstellen können sich
+mit Steam-Updates ändern. Bei fehlender Anbindung erscheint ein sichtbarer Fehler.
+Kein Tastatur- oder Passworttext wird durch das Plugin protokolliert.
+
+Die Seitenleiste wächst auf 292 CSS-Pixel (260 in schmalen Ansichten). Die
+unteren Navigationselemente haben einen eigenen Abstand und lesbare, bei Bedarf
+umbrechende Beschriftungen. Einrückung am Klappsymbol und 60 Pixel Fußraum halten
+Steams Bedienleiste frei. Ein gemessener Routenversatz wird von der verfügbaren
+Höhe abgezogen. Tests umfassen außerdem diesen Versatz und vollständige Labels.

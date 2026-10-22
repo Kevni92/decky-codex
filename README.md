@@ -78,14 +78,15 @@ Fehlertext; keine Anmeldedateien oder Passwörter weitergeben.
 ## Bedienung
 
 - Die Seitenleiste enthält neue und gespeicherte Chats. „Alle Chats“ öffnet die Verwaltung.
-- Im nativen Steam-Eingabefeld A drücken bzw. das Feld antippen, um Steams Tastatur
-  aufzurufen. Gesendet wird mit der Pfeil-Schaltfläche oder Strg + Enter; das Schließen
+- Im Eingabefeld A drücken, das Feld antippen oder das Tastatursymbol wählen,
+  um Steams Tastatur aufzurufen. Gesendet wird mit der Pfeil-Schaltfläche oder Strg + Enter; das Schließen
   der Tastatur sendet keine Nachricht. Die Standard-Eingabe ist einzeilig.
 - „Einstellungen“ öffnet eine eigene Seite. Ein Chatentwurf bleibt beim Wechsel erhalten.
 - Aktivitäten und Terminalausgaben öffnen sich erst auf Wunsch im Gespräch.
 - Es gibt keinen eigenen Datei-Manager und keine feste Scan-Schaltfläche. Speicheranalyse
   ist eine normale Codex-Aufgabe; Ergebnisse stehen in der Chatantwort.
 
-Die native Texteingabe wird durch Steams TextField-Komponente bereitgestellt. CI prüft
-Rendern, Fokus-/Eingabevertrag und den Chatablauf in einer simulierten Decky-Umgebung;
+Die native Texteingabe nutzt Steams TextField und die Tastaturverwaltung des zugehörigen
+Steam-Fensters. CI prüft Steams tatsächliche Input-Wrapper, den expliziten Tastaturaufruf,
+Zeicheneingaben und den Chatablauf in einer simulierten Decky-Umgebung;
 das tatsächliche Öffnen der Steam-Tastatur muss am Gerät bestätigt werden.

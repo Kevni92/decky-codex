@@ -49,6 +49,18 @@ try {
   assert.equal(await page.getByRole("button", { name: /Große Dateien untersuchen|Scan stoppen|Auswahl in Papierkorb/ }).count(), 0);
   assert.equal(await page.getByRole("combobox").count(), 0);
   assert.equal(await page.getByText("Exakter Werkzeugschritt: 42 Dateien geprüft").count(), 0);
+  const sidebar = page.getByRole("complementary", { name: "Chats und Navigation" });
+  const sidebarBox = await sidebar.boundingBox();
+  assert.ok(sidebarBox.width >= 280);
+  const collapseBox = await page.getByRole("button", { name: "Seitenleiste einklappen", exact: true }).boundingBox();
+  assert.ok(sidebarBox.x + sidebarBox.width - collapseBox.x - collapseBox.width >= 18);
+  const settingsBox = await page.getByRole("button", { name: "Einstellungen", exact: true }).boundingBox();
+  const backBox = await page.getByRole("button", { name: "Zurück zu Steam", exact: true }).boundingBox();
+  assert.ok(backBox.y - settingsBox.y - settingsBox.height >= 9);
+  for (const text of ["Neuer Chat", "Einstellungen", "Zurück zu Steam"]) {
+    const label = page.getByRole("button", { name: text, exact: true }).locator(".dc-truncate");
+    assert.ok(await label.evaluate(el => el.scrollWidth <= el.clientWidth + 1));
+  }
   await page.screenshot({ path: "out/ui-chat.png" });
   await page.getByRole("button", { name: /Aktivitäten – technische Details/ }).click();
   await page.getByText("Exakter Werkzeugschritt: 42 Dateien geprüft").waitFor();
@@ -56,7 +68,20 @@ try {
   const input = page.getByRole("textbox", { name: "Nachricht an Codex", exact: true });
   assert.equal(await input.getAttribute("data-native-steam-field"), "true");
   await input.click();
-  await input.fill("Installiere Programm X");
+  assert.equal(await input.isVisible(), true);
+  assert.equal(await page.evaluate(() => window.__test.keyboardOpen), true);
+  await page.evaluate(() => window.__test.keyboardProps.onTextEntered("Installiere Programm X"));
+  assert.equal(await input.inputValue(), "Installiere Programm X");
+  await input.evaluate(el => el.setSelectionRange(el.value.length - 1, el.value.length));
+  await page.evaluate(() => window.__test.keyboardProps.onTextEntered("Y"));
+  assert.equal(await input.inputValue(), "Installiere Programm Y");
+  await page.evaluate(() => { window.__test.keyboardProps.onTextEntered("Backspace"); window.__test.keyboardProps.onTextEntered("X"); window.__test.keyboardProps.onTextEntered("😀"); window.__test.keyboardProps.onTextEntered("Backspace"); });
+  assert.equal(await input.inputValue(), "Installiere Programm X");
+  await page.evaluate(() => window.__test.keyboardProps.onEnterKeyPress());
+  assert.equal(await page.evaluate(() => window.__test.keyboardOpen), false);
+  await page.getByRole("button", { name: "Tastatur öffnen: Nachricht an Codex", exact: true }).click();
+  assert.equal(await page.evaluate(() => window.__test.keyboardOpen), true);
+  await page.evaluate(() => window.__test.keyboardProps.onEnterKeyPress());
   await input.press("Enter");
   assert.equal(await page.evaluate(() => window.__test.keyboardActivations > 0), true);
   assert.equal(await page.evaluate(() => window.__test.calls.some(c => c.method === "send")), false);
@@ -96,20 +121,35 @@ try {
   await page.evaluate(() => window.__test.request("password"));
   const password = page.getByLabel("Linux-Benutzerpasswort", { exact: true });
   assert.equal(await password.getAttribute("type"), "password");
-  await password.fill("not-a-real-password");
+  await password.click();
+  await page.evaluate(() => window.__test.keyboardProps.onTextEntered("not-a-real-password"));
+  assert.equal(await password.inputValue(), "not-a-real-password");
   await page.getByRole("button", { name: "Authentifizieren", exact: true }).click();
   assert.equal(await page.evaluate(() => JSON.stringify(window.__test.state).includes("not-a-real-password")), false);
+  await page.evaluate(() => window.__test.keyboardProps.onTextEntered("late-callback-must-not-leak"));
+  assert.equal(await input.inputValue(), "");
   await page.getByRole("button", { name: "Neuer Chat", exact: true }).click();
   await page.getByRole("heading", { name: "Wobei kann ich dir helfen?", exact: true }).waitFor();
   await page.screenshot({ path: "out/ui-empty.png" });
   // Steam Deck 720p layout: no document overflow; composer stays in view.
   await page.setViewportSize({ width: 1280, height: 720 });
+  await page.evaluate(() => { document.getElementById("root").style.marginTop = "48px"; });
+  await page.waitForTimeout(100);
   await page.getByRole("button", { name: "Seitenleiste einklappen", exact: true }).click();
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= 1280 && document.documentElement.scrollHeight <= 720), true);
   const composerBox = await input.boundingBox();
   assert.ok(composerBox.y >= 40 && composerBox.y + composerBox.height <= 720 - 28);
   await page.getByRole("button", { name: "Seitenleiste öffnen", exact: true }).click();
   await page.setViewportSize({ width: 1280, height: 800 });
+  await page.evaluate(() => { document.getElementById("root").style.marginTop = "0"; });
+  // A native keyboard failure is visible and can be retried without losing text.
+  await page.evaluate(() => { window.__test.keyboardUnavailable = true; });
+  await page.getByRole("button", { name: "Tastatur öffnen: Nachricht an Codex", exact: true }).click();
+  await page.getByRole("alert").filter({ hasText: "Test: Steam keyboard unavailable" }).waitFor();
+  await page.evaluate(() => { window.__test.keyboardUnavailable = false; });
+  await page.getByRole("button", { name: "Tastatur öffnen: Nachricht an Codex", exact: true }).click();
+  assert.equal(await page.evaluate(() => window.__test.keyboardOpen), true);
+  await page.evaluate(() => window.__test.keyboardProps.onEnterKeyPress());
   // Leaving the chat after returning from settings must not reopen settings.
   await page.getByRole("button", { name: "Zurück zu Steam", exact: true }).click();
   assert.equal(await page.evaluate(() => window.__test.closed), true);
@@ -131,5 +171,5 @@ try {
   assert.deepEqual(errors, []);
   console.log("Backend startup: stalled transport times out, import errors are visible, reconnect recovers without mutation");
   await page.screenshot({ path: "out/ui-preview.png", fullPage: true });
-  console.log("Rendered compiled plugin: chat layout, native Steam input contract, separate settings route, draft recovery, model selection, choices, password isolation and viewport layout passed");
+  console.log("Rendered compiled plugin: actual Steam input wrappers, owning-window keyboard invocation and text callbacks, masked password, sidebar spacing, viewport offsets, settings and chat flows passed");
 } finally { await browser.close(); server.close(); }
