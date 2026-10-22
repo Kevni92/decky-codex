@@ -68,6 +68,13 @@ try {
   assert.equal(await page.getByRole("complementary", { name: "Chats und Navigation" }).count(), 0);
   await page.getByRole("combobox", { name: "Modell", exact: true }).selectOption("other");
   await page.screenshot({ path: "out/ui-settings.png" });
+  // Return pops the native backstack, rather than pushing another chat route.
+  await page.getByRole("button", { name: "Zurück zum Chat", exact: true }).click();
+  await page.getByRole("heading", { name: "Speicherübersicht" }).waitFor();
+  assert.equal(await page.evaluate(() => window.__test.path), "/decky-codex");
+  assert.equal(await input.inputValue(), "Installiere Programm X");
+  await page.getByRole("button", { name: "Einstellungen", exact: true }).click();
+  await page.getByRole("heading", { name: "Einstellungen", exact: true }).waitFor();
   // A request arriving while settings are open remains discoverable.
   await page.evaluate(() => window.__test.request("question"));
   await page.getByRole("button", { name: "Entscheidung öffnen", exact: true }).click();
@@ -103,6 +110,9 @@ try {
   assert.ok(composerBox.y >= 40 && composerBox.y + composerBox.height <= 720 - 28);
   await page.getByRole("button", { name: "Seitenleiste öffnen", exact: true }).click();
   await page.setViewportSize({ width: 1280, height: 800 });
+  // Leaving the chat after returning from settings must not reopen settings.
+  await page.getByRole("button", { name: "Zurück zu Steam", exact: true }).click();
+  assert.equal(await page.evaluate(() => window.__test.closed), true);
   assert.deepEqual(errors, []);
   // A dead Decky backend must stop showing the indefinite connection screen.
   await page.goto(`http://127.0.0.1:${server.address().port}/?transport=hang`);
