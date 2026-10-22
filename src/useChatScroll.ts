@@ -11,7 +11,7 @@ export function useChatScroll(frame: RefObject<HTMLDivElement | null>, enabled: 
     if (!enabled || !root || !view) return;
     const router = Router as unknown as { WindowStore?: { GetWindowInstanceFromWindow?: (w: Window) => { VirtualKeyboardManager?: { IsShowingVirtualKeyboard?: boolean | { Value: boolean } } } } };
     const scroll = (delta: number) => {
-      if (!root.isConnected || root.ownerDocument.hidden || Array.from(root.ownerDocument.querySelectorAll<HTMLElement>('[role="dialog"]')).some(el => el.getClientRects().length > 0)) return;
+      if (!root.isConnected || root.ownerDocument.hidden || root.ownerDocument.activeElement?.closest('[role="dialog"]')) return;
       const keyboard = router.WindowStore?.GetWindowInstanceFromWindow?.(view)?.VirtualKeyboardManager?.IsShowingVirtualKeyboard;
       if (typeof keyboard === "object" ? keyboard.Value : keyboard) return;
       const target = root.querySelector<HTMLElement>(".dc-transcript, .dc-page-scroll");
@@ -42,6 +42,6 @@ export function useChatScroll(frame: RefObject<HTMLDivElement | null>, enabled: 
       frameId = view.requestAnimationFrame(tick);
     };
     frameId = view.requestAnimationFrame(tick);
-    return () => { subscription?.unregister?.(); subscription?.Unregister?.(); if (frameId) view.cancelAnimationFrame(frameId); };
+    return () => { if (subscription?.unregister) subscription.unregister(); else subscription?.Unregister?.(); if (frameId) view.cancelAnimationFrame(frameId); };
   }, [frame, enabled]);
 }

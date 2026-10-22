@@ -25,7 +25,10 @@ async def stop_process(process):
         try:
             await asyncio.wait_for(process.wait(), 2)
         except asyncio.TimeoutError:
-            process.kill()
+            try:
+                process.kill()
+            except ProcessLookupError:
+                pass
             await process.wait()
 
 
@@ -86,19 +89,24 @@ class Dictation:
 
     async def read_audio(self):
         try:
-            while self.state == "recording":
+            while True:
                 block = await self.capture.stdout.read(8192)
                 if not block:
                     if self.state == "recording":
                         self.state = "failed"
                         self.error = "Mikrofon konnte nicht aufgenommen werden. Standard-Eingabegerät in Steam prüfen."
                     return
+                if self.state != "recording":
+                    continue  # Drain the pipe after stop; never retain trailing audio.
                 remaining = MAX_BYTES - len(self.audio)
                 self.audio.extend(block[:remaining])
                 if len(self.audio) >= MAX_BYTES:
                     self.state = "recorded"
-                    await stop_process(self.capture)
-                    return
+                    try:
+                        self.capture.send_signal(signal.SIGINT)
+                    except ProcessLookupError:
+                        pass
+                    # Keep draining to EOF so bounded stdout cannot deadlock wait().
         except (OSError, asyncio.CancelledError):
             return
 
@@ -175,10 +183,12 @@ class Dictation:
                 return {}  # Idempotent; an old view cannot cancel a new recording.
             self.token = None
             self.state = "idle"
-            tasks = [t for t in (self.reader, self.worker, self.watchdog) if t and t is not asyncio.current_task()]
+            tasks = [t for t in (self.worker, self.watchdog) if t and t is not asyncio.current_task()]
             for task in tasks:
                 task.cancel()
             await stop_process(self.capture)
+            if self.reader:
+                await self.reader
             await stop_process(self.decoder)
             await asyncio.gather(*tasks, return_exceptions=True)
             self.audio.clear()

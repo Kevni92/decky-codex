@@ -97,6 +97,44 @@ class VoiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('Keine Sprache', self.voice.error)
         self.assertIsNone(self.voice.decoder)
 
+    async def test_cancel_during_decoder_removes_private_files_and_stops_process(self):
+        decoder = self.root / 'bin/voice/whisper-cli'
+        decoder.write_text('#!' + sys.executable + '\nimport time\ntime.sleep(20)\n')
+        files = {str(p.relative_to(self.root / 'bin')): hashlib.sha256(p.read_bytes()).hexdigest() for p in (self.root / 'bin/voice').iterdir()}
+        (self.root / 'runtime/voice-installed.json').write_text(json.dumps({'files': files}))
+        result = await self.voice.start({})
+        await asyncio.sleep(.08)
+        await self.voice.finish({'token': result['token']})
+        for _ in range(100):
+            if self.voice.decoder:
+                break
+            await asyncio.sleep(.02)
+        self.assertIsNotNone(self.voice.decoder)
+        self.assertTrue(list((self.root / 'data/voice').iterdir()))
+        await self.voice.cancel({'token': result['token']})
+        self.assertIsNotNone(self.voice.decoder.returncode)
+        self.assertEqual(list((self.root / 'data/voice').iterdir()), [])
+        self.assertFalse(self.voice.audio)
+        self.assertEqual(self.voice.text, '')
+
+    async def test_recording_deadline_stops_even_without_full_audio_buffer(self):
+        result = await self.voice.start({})
+        self.voice.started = time.monotonic() - 31
+        await asyncio.sleep(.65)
+        self.assertEqual(self.voice.state, 'recorded')
+        self.assertIsNotNone(self.voice.capture.returncode)
+        self.assertLess(len(self.voice.audio), MAX_BYTES)
+        await self.voice.cancel({'token': result['token']})
+
+    async def test_capture_size_limit_stops_microphone(self):
+        self.recorder.write_text('#!' + sys.executable + '\nimport sys,time\nsys.stdout.buffer.write(b"a" * 1100000);sys.stdout.buffer.flush();time.sleep(20)\n')
+        result = await self.voice.start({})
+        await self.wait_state(('recorded', 'failed'))
+        self.assertEqual(self.voice.state, 'recorded', self.voice.error)
+        self.assertEqual(len(self.voice.audio), MAX_BYTES)
+        await self.voice.capture.wait()
+        await self.voice.cancel({'token': result['token']})
+
     async def test_tampered_model_never_opens_microphone(self):
         (self.root / 'bin/voice/model.bin').write_bytes(b'tampered')
         with self.assertRaisesRegex(ValueError, 'Prüfsumme'):

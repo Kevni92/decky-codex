@@ -80,6 +80,10 @@ try {
   const scrollBefore = await page.locator(".dc-transcript").evaluate(el => el.scrollTop);
   await page.evaluate(() => window.__test.analog(0, 47, 1, 0, -1));
   assert.ok((await page.locator(".dc-transcript").evaluate(el => el.scrollTop)) > scrollBefore);
+  const beforeKeyboardScroll = await page.locator(".dc-transcript").evaluate(el => el.scrollTop);
+  await page.evaluate(() => { window.__test.keyboardOpen = true; window.__test.analog(0, 47, 1, 0, 1); });
+  assert.equal(await page.locator(".dc-transcript").evaluate(el => el.scrollTop), beforeKeyboardScroll);
+  await page.evaluate(() => { window.__test.keyboardOpen = false; });
   await page.evaluate(text => { window.__test.state.chat.messages[1].text = text; window.__test.publish(); }, original);
   await page.waitForTimeout(100);
   await page.screenshot({ path: "out/ui-chat.png" });

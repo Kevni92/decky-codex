@@ -60,7 +60,11 @@ def prepare():
     silence.write_bytes(struct.pack('<4sI4s4sIHHIIHH4sI', b'RIFF', 36 + len(pcm), b'WAVE', b'fmt ', 16, 1, 1, 16000, 32000, 2, 16, b'data', len(pcm)) + pcm)
     subprocess.run([str(destination / 'whisper-cli'), '-m', str(destination / 'model.bin'), '-f', str(silence), '-l', 'de', '-t', '2', '-ng', '-nt', '-otxt', '-of', str(cache / 'silence')], check=True, timeout=90)
     assert (cache / 'silence.txt').is_file(), 'Inference did not produce output'
-    print('Verified local voice runtime and offline inference')
+    speech = source / 'samples/jfk.wav'
+    subprocess.run([str(destination / 'whisper-cli'), '-m', str(destination / 'model.bin'), '-f', str(speech), '-l', 'en', '-t', '2', '-ng', '-nt', '-otxt', '-of', str(cache / 'speech')], check=True, timeout=90)
+    transcript = (cache / 'speech.txt').read_text().lower()
+    assert 'country' in transcript and 'ask' in transcript, 'Offline speech recognition failed'
+    print('Verified local voice runtime and offline speech recognition')
 
 
 if __name__ == '__main__':

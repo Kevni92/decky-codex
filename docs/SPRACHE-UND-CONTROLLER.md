@@ -16,7 +16,7 @@ Native CLI und rund 57 MiB Modell werden in GitHub Actions gebaut/gebündelt.
 Ubuntu 22.04, statische ggml/Whisper-Bibliotheken und statische GCC-Runtimes;
 keine Python-Pakete, Node- oder Paketmanagerinstallation auf dem Deck.
 `prepare_voice.py` prüft Quellen/Modell, baut die CLI und führt echte lokale
-Inferenz mit synthetischem Audio aus. Paketbau prüft jede gebündelte Voice-Datei.
+Inferenz mit synthetischem Audio und dem öffentlichen Upstream-Sprachbeispiel aus. Paketbau prüft jede gebündelte Voice-Datei.
 
 ## Aufnahme und Lebenszyklus
 
