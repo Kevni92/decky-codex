@@ -6,6 +6,7 @@ import { createRoot } from "react-dom/client";
 import * as jsx from "react/jsx-runtime";
 const h = React.createElement;
 const routes = new Map();
+const backstack = ["/decky-codex"];
 let event;
 let root;
 const calls = [];
@@ -58,7 +59,7 @@ window.DFL = {
     h("input", { "data-native-steam-field": true, type: bIsPassword ? "password" : "text", value, onChange, onClick: () => { window.__test.keyboardActivations++; }, onKeyDown: e => { if (e.key === "Enter" && !e.ctrlKey) window.__test.keyboardActivations++; onKeyDown?.(e); }, disabled })),
   Dropdown: ({ rgOptions, selectedOption, onChange }) => h("select", { "aria-label": "Modell", value: selectedOption, onChange: e => onChange({ data: e.target.value }) }, rgOptions.map(o => h("option", { key: o.data, value: o.data }, o.label))),
   ConfirmModal: () => h("div"), showModal() {},
-  Navigation: { Navigate: path => render(path), CloseSideMenus() {}, NavigateBack() {}, NavigateToExternalWeb() {} }
+  Navigation: { Navigate: path => { backstack.push(path); render(path); }, CloseSideMenus() {}, NavigateBack() { if (backstack.length > 1) { backstack.pop(); render(backstack.at(-1)); } else window.__test.closed = true; }, NavigateToExternalWeb() {} }
 };
 window.__DECKY_SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED_deckyLoaderAPIInit = { connect: () => api };
 import(window.location.origin + "/dist/index.js").then(module => { module.default(); root = createRoot(document.getElementById("root")); render("/decky-codex"); });

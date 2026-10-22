@@ -241,11 +241,11 @@ function Settings() {
   // Opening account settings is an explicit read of the cached sign-in status.
   useEffect(() => { void act("refresh_account"); }, []);
   if (!state) return <Startup connection={connection} />;
-  return <Focusable className="dc dc-app" onCancel={() => go(CHAT_ROUTE)}><style>{css}</style><main className="dc-settings-shell" aria-label="Einstellungen">
-    <header className="dc-settings-header"><Button label="Zurück zum Chat" icon="back" onClick={() => go(CHAT_ROUTE)} /><span className="dc-muted">Decky Codex · {state.version}</span></header>
+  return <Focusable className="dc dc-app" onCancel={() => Navigation.NavigateBack()}><style>{css}</style><main className="dc-settings-shell" aria-label="Einstellungen">
+    <header className="dc-settings-header"><Button label="Zurück zum Chat" icon="back" onClick={() => Navigation.NavigateBack()} /><span className="dc-muted">Decky Codex · {state.version}</span></header>
     <div className="dc-page-scroll"><div className="dc-page"><div className="dc-page-heading"><h1>Einstellungen</h1><p>Konto, Modell und Freigaben für deinen Assistenten.</p></div>
       {(error || state.error) && <div className="dc-notice" role="alert">{error || state.error}</div>}
-      {!!state.requests.length && <div className="dc-banner"><span>Codex wartet auf deine Entscheidung.</span><Button label="Entscheidung öffnen" onClick={() => go(CHAT_ROUTE)} /></div>}
+      {!!state.requests.length && <div className="dc-banner"><span>Codex wartet auf deine Entscheidung.</span><Button label="Entscheidung öffnen" onClick={() => Navigation.NavigateBack()} /></div>}
       <div className="dc-settings-grid">
         <section className="dc-setting-section"><h2><Icon name="account" />ChatGPT-Konto</h2><div className="dc-account"><div className="dc-avatar">{state.account?.email?.slice(0, 1).toUpperCase() || <Icon name="account" />}</div><div><strong>{state.account ? "Verbunden" : "Nicht verbunden"}</strong><p>{state.account?.email || "Melde dich mit deinem ChatGPT-Konto an."}</p></div></div>
           <div className="dc-actions">{!state.account ? <Button className="dc-primary" label="Mit ChatGPT anmelden" onClick={() => { void act("login"); }} /> : <Button className="dc-secondary" label="Abmelden" disabled={state.busy} onClick={() => { void act("logout"); }} />}<Button label="Status prüfen" onClick={() => { void act("refresh_account"); }} /></div>
