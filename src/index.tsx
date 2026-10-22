@@ -253,7 +253,7 @@ function Settings() {
         </section>
         <section className="dc-setting-section"><h2><Icon name="spark" />Modell</h2><p>Wähle das Modell für deine nächsten Nachrichten.</p><div style={{ marginTop: 18 }}>{state.models.length ? <Dropdown rgOptions={state.models.map(m => ({ data: m.model || m.id, label: m.displayName || m.model || m.id }))} selectedOption={model || (state.models.find(m => m.isDefault)?.model || state.models[0].model || state.models[0].id)} onChange={o => { const value = String(o.data); selectedModel = value; setModel(value); }} /> : <p className="dc-muted">Verfügbare Modelle erscheinen nach der Anmeldung.</p>}</div><p style={{ marginTop: 20 }}>Es gelten die Kontingente deines ChatGPT-Kontos. Es erfolgt kein automatischer Wechsel zu einer kostenpflichtigen API.</p></section>
         <section className="dc-setting-section dc-wide"><h2><Icon name="shield" />Deine Kontrolle</h2><p>Codex erklärt geplante Änderungen und fragt im Chat nach deiner Freigabe. Administratoraktionen benötigen zusätzlich dein Linux-Passwort in einem getrennten lokalen Eingabefeld.</p><p>Codex verarbeitet Anfragen online. Datei- und Befehlsausgaben, die für deine Aufgabe verwendet werden, können an OpenAI übermittelt werden. Chats werden lokal auf deinem Steam Deck gespeichert.</p></section>
-      </div><p className="dc-settings-footnote">Vorschau · Steam-Tastatur und Controller benötigen weiterhin eine Prüfung am echten Gerät.</p>
+      </div><p className="dc-settings-footnote">Vorschau · Deine Freigabe gilt jeweils nur für die angezeigte Aktion.</p>
     </div></div>
   </main></Focusable>;
 }
@@ -263,8 +263,8 @@ function Panel() {
 }
 export default definePlugin(() => {
   const listener = addEventListener<[State]>("decky_codex_state", publish);
-  routerHook.addRoute(CHAT_ROUTE, Chat);
-  routerHook.addRoute(SETTINGS_ROUTE, Settings);
+  routerHook.addRoute(CHAT_ROUTE, Chat, { exact: true });
+  routerHook.addRoute(SETTINGS_ROUTE, Settings, { exact: true });
   return { name: "Decky Codex", titleView: <div>Decky Codex</div>, icon: <Icon name="spark" />, content: <Panel />,
     onDismount() { removeEventListener("decky_codex_state", listener); routerHook.removeRoute(CHAT_ROUTE); routerHook.removeRoute(SETTINGS_ROUTE); listeners.clear(); current = undefined; drafts.clear(); selectedModel = ""; } };
 });

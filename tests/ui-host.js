@@ -21,7 +21,7 @@ const state = {
   activities: [{ id: "step", title: "Speicheranalyse abgeschlossen", details: "Exakter Werkzeugschritt: 42 Dateien geprüft", status: "completed" }],
   sessions: [], requests: [], inventory: null
 };
-const render = path => { const component = routes.get(path); if (!component) throw Error("Unknown route: " + path); window.__test.path = path; root.render(h(component)); };
+const render = path => { const component = [...routes].find(([candidate, entry]) => entry.exact ? candidate === path : path.startsWith(candidate))?.[1].component; if (!component) throw Error("Unknown route: " + path); window.__test.path = path; root.render(h(component)); };
 window.__test = {
   calls, state, path: "/decky-codex", keyboardActivations: 0,
   transport: new URLSearchParams(location.search).get("transport"),
@@ -45,7 +45,7 @@ const api = {
   },
   addEventListener: (_, handler) => { event = handler; return handler; },
   removeEventListener() {},
-  routerHook: { addRoute: (path, component) => routes.set(path, component), removeRoute(path) { routes.delete(path); } }
+  routerHook: { addRoute: (path, component, props = {}) => routes.set(path, { component, exact: props.exact }), removeRoute(path) { routes.delete(path); } }
 };
 const Button = ({ children, onClick, disabled, style, className, ...props }) => h("button", { onClick, disabled, style, className, "aria-expanded": props["aria-expanded"] }, children);
 window.SP_REACT = React;

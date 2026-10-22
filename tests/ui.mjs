@@ -30,6 +30,17 @@ try {
   await page.getByRole("heading", { name: "Speicherübersicht" }).waitFor();
   assert.equal(await page.getByRole("table").count(), 1);
   assert.equal(await page.locator("img").count(), 0);
+  const tableContrast = await page.locator("td, th").evaluateAll(cells => {
+    const rgb = color => color.match(/[\d.]+/g).map(Number);
+    const luminance = color => rgb(color).slice(0, 3).map(v => { v /= 255; return v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; }).reduce((sum, v, i) => sum + v * [.2126, .7152, .0722][i], 0);
+    return cells.map(cell => {
+      let element = cell;
+      while (element.parentElement && rgb(getComputedStyle(element).backgroundColor)[3] === 0) element = element.parentElement;
+      const fg = luminance(getComputedStyle(cell).color), bg = luminance(getComputedStyle(element).backgroundColor);
+      return (Math.max(fg, bg) + .05) / (Math.min(fg, bg) + .05);
+    });
+  });
+  assert.ok(tableContrast.every(value => value >= 4.5), "Table cells must have readable contrast");
   assert.equal(await page.locator("textarea").count(), 0);
   assert.equal(await page.getByRole("button", { name: /Große Dateien untersuchen|Scan stoppen|Auswahl in Papierkorb/ }).count(), 0);
   assert.equal(await page.getByRole("combobox").count(), 0);
