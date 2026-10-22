@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { addEventListener, callable, definePlugin, removeEventListener, routerHook } from "@decky/api";
-import { ButtonItem, DialogButton, Dropdown, Focusable, Navigation, PanelSection, PanelSectionRow, TextField, ConfirmModal, showModal } from "@decky/ui";
+import { ButtonItem, DialogButton, Dropdown, Focusable, Navigation, PanelSection, PanelSectionRow, ConfirmModal, showModal } from "@decky/ui";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { css } from "./theme";
+import { SteamTextInput } from "./SteamTextInput";
+import { useRouteFrame } from "./useRouteFrame";
 
 type Message = { id: string; role: string; text: string; activities?: State["activities"] };
 type Request = { id: string; kind: string; title: string; details: string; generation: string; options: { id: string; label: string; description: string; value: string }[] };
@@ -131,8 +133,8 @@ function Question({ request, act }: { request: Request; act: Act }) {
     <div className="dc-request-kind">{request.kind === "password" ? "Lokale Authentifizierung" : request.kind === "question" ? "Codex fragt dich" : "Deine Freigabe"}</div>
     <h3>{request.title}</h3>
     {request.details && <Focusable className="dc-question-details">{request.details}</Focusable>}
-    {request.kind === "password" && <TextField label="Linux-Benutzerpasswort" bIsPassword value={password} onChange={e => setPassword(e.target.value)} disabled={sending} />}
-    {request.kind === "text" && <TextField label="Deine Antwort" value={answer} onChange={e => setAnswer(e.target.value)} disabled={sending} />}
+    {request.kind === "password" && <SteamTextInput label="Linux-Benutzerpasswort" password value={password} onChange={setPassword} disabled={sending} />}
+    {request.kind === "text" && <SteamTextInput label="Deine Antwort" value={answer} onChange={setAnswer} disabled={sending} />}
     {!!request.options.length && <div className="dc-choice-grid">{request.options.map(option => <DialogButton className="dc-button dc-choice" key={option.id} disabled={sending} onClick={() => { void submit(option.id); }}>
       <strong>{option.label}</strong><span className="dc-choice-description">{option.description}</span>
     </DialogButton>)}</div>}
@@ -162,13 +164,15 @@ function Activity({ state, act }: { state: State; act?: Act }) {
   </div>;
 }
 function Startup({ connection }: { connection: ReturnType<typeof useBackend> }) {
-  return <div className="dc dc-app dc-startup"><style>{css}</style><div><Icon name="spark" /><h1>Decky Codex</h1>
+  const frame = useRouteFrame();
+  return <div ref={frame} className="dc dc-app dc-startup"><style>{css}</style><div><Icon name="spark" /><h1>Decky Codex</h1>
     <p role={connection.error ? "alert" : "status"}>{connection.error || "Verbindung wird hergestellt …"}</p>
     <Button className="dc-secondary" label="Erneut verbinden" disabled={connection.connecting} onClick={() => { void connection.retry(); }} />
     {connection.error && <p className="dc-muted">Pluginprotokoll: homebrew/logs/Decky Codex</p>}
   </div></div>;
 }
 function Chat() {
+  const frame = useRouteFrame();
   const connection = useBackend();
   const { state, error, act } = connection;
   const [view, setView] = useState<"chat" | "history">("chat");
@@ -197,7 +201,7 @@ function Chat() {
   };
   if (!state) return <Startup connection={connection} />;
   const running = state.busy || state.sessions.some(s => s.running);
-  return <Focusable className="dc dc-app" onCancel={() => Navigation.NavigateBack()}>
+  return <Focusable ref={frame} className="dc dc-app" onCancel={() => Navigation.NavigateBack()}>
     <style>{css}</style>
     <aside className={`dc-sidebar ${sidebar ? "" : "dc-collapsed"}`} aria-label="Chats und Navigation">
       <div className="dc-brand">{sidebar && <span>Decky Codex</span>}<Button label={sidebar ? "Seitenleiste einklappen" : "Seitenleiste öffnen"} icon="sidebar" iconOnly onClick={() => setSidebar(!sidebar)} /></div>
@@ -213,7 +217,7 @@ function Chat() {
         {!!state.requests.length && <div className="dc-banner"><span>Codex wartet auf deine Entscheidung.</span><Button label="Entscheidung öffnen" onClick={() => setView("chat")} /></div>}
         {state.chats.map(chat => <div className="dc-history-row" key={chat.id}><Button label={chat.title} icon="chats" disabled={state.busy || sending} onClick={() => { void chooseChat(chat.id); }} /><Button label={`Chat löschen: ${chat.title}`} icon="trash" iconOnly disabled={state.busy || sending} onClick={() => { showModal(<ConfirmModal strTitle="Chat löschen?" strDescription={`Chat „${chat.title}“ einschließlich Codex-Verlauf löschen?`} onOK={() => { void act("delete_chat", { id: chat.id }); }} />); }} /></div>)}
         {!state.chats.length && <p className="dc-muted">Noch keine Gespräche gespeichert.</p>}
-        {state.chat && <section className="dc-setting-section" style={{ marginTop: 28 }}><h2>Aktuellen Chat umbenennen</h2><TextField label="Chattitel" value={title} onChange={e => setTitle(e.target.value)} /><div className="dc-actions"><Button label="Titel speichern" disabled={state.busy || !title.trim()} onClick={() => { void act("rename_chat", { id: state.chat!.id, title }); }} /></div></section>}
+        {state.chat && <section className="dc-setting-section" style={{ marginTop: 28 }}><h2>Aktuellen Chat umbenennen</h2><SteamTextInput label="Chattitel" value={title} onChange={setTitle} /><div className="dc-actions"><Button label="Titel speichern" disabled={state.busy || !title.trim()} onClick={() => { void act("rename_chat", { id: state.chat!.id, title }); }} /></div></section>}
       </div></div> : <div className="dc-chat-body">
         <div className="dc-transcript" ref={scroll} onScroll={e => { const el = e.currentTarget; follow.current = el.scrollHeight - el.scrollTop - el.clientHeight < 90; }}>
           <div className="dc-column">
@@ -227,21 +231,22 @@ function Chat() {
         </div>
         {!!state.requests.length && <div className="dc-request-tray" aria-label="Wartende Entscheidungen">{state.requests.map(request => <Question key={request.id} request={request} act={act} />)}</div>}
         <footer className="dc-composer-area"><div className="dc-column"><div className="dc-composer">
-          <div className="dc-native-input">{!draft && <span className="dc-input-placeholder" aria-hidden="true">Frag Codex etwas …</span>}<TextField label={<span className="dc-sr-only">Nachricht an Codex</span>} value={draft} disabled={state.busy || sending} onChange={e => { setDraft(e.target.value); drafts.set(chatId, e.target.value); }} onKeyDown={e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); void send(); } }} /></div>
+          <div className="dc-native-input">{!draft && <span className="dc-input-placeholder" aria-hidden="true">Frag Codex etwas …</span>}<SteamTextInput compact label="Nachricht an Codex" value={draft} disabled={state.busy || sending} onChange={value => { setDraft(value); drafts.set(chatId, value); }} onKeyDown={e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); void send(); } }} /></div>
           {running ? <Button className="dc-primary dc-send" label="Aufgabe stoppen" icon="stop" iconOnly onClick={() => { void act("interrupt"); }} /> : <Button className="dc-primary dc-send" label="Nachricht senden" icon="send" iconOnly disabled={sending || !draft.trim()} onClick={() => { void send(); }} />}
-        </div><p className="dc-composer-hint">A im Eingabefeld: Steam-Tastatur · Strg + Enter: senden · Änderungen werden vorab bestätigt.</p></div></footer>
+        </div><p className="dc-composer-hint">A oder Tastatursymbol: Eingabe öffnen · Strg + Enter: senden · Änderungen werden vorab bestätigt.</p></div></footer>
       </div>}
     </main>
   </Focusable>;
 }
 function Settings() {
+  const frame = useRouteFrame();
   const connection = useBackend();
   const { state, error, act } = connection;
   const [model, setModel] = useState(selectedModel);
   // Opening account settings is an explicit read of the cached sign-in status.
   useEffect(() => { void act("refresh_account"); }, []);
   if (!state) return <Startup connection={connection} />;
-  return <Focusable className="dc dc-app" onCancel={() => Navigation.NavigateBack()}><style>{css}</style><main className="dc-settings-shell" aria-label="Einstellungen">
+  return <Focusable ref={frame} className="dc dc-app" onCancel={() => Navigation.NavigateBack()}><style>{css}</style><main className="dc-settings-shell" aria-label="Einstellungen">
     <header className="dc-settings-header"><Button label="Zurück zum Chat" icon="back" onClick={() => Navigation.NavigateBack()} /><span className="dc-muted">Decky Codex · {state.version}</span></header>
     <div className="dc-page-scroll"><div className="dc-page"><div className="dc-page-heading"><h1>Einstellungen</h1><p>Konto, Modell und Freigaben für deinen Assistenten.</p></div>
       {(error || state.error) && <div className="dc-notice" role="alert">{error || state.error}</div>}

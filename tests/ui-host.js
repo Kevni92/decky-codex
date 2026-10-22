@@ -1,6 +1,6 @@
 // A simulated Steam/Decky host for testing the real compiled plugin.
-// Native TextField contracts are represented here; actual Steam keyboard display
-// is a hardware integration test, not something a browser fixture can establish.
+// TextField uses Steam's real label/wrapper structure. Its automatic keyboard
+// context intentionally does nothing; the plugin must resolve the owning window.
 import React from "react";
 import { createRoot } from "react-dom/client";
 import * as jsx from "react/jsx-runtime";
@@ -24,7 +24,7 @@ const state = {
 };
 const render = path => { const component = [...routes].find(([candidate, entry]) => entry.exact ? candidate === path : path.startsWith(candidate))?.[1].component; if (!component) throw Error("Unknown route: " + path); window.__test.path = path; root.render(h(component)); };
 window.__test = {
-  calls, state, path: "/decky-codex", keyboardActivations: 0,
+  calls, state, path: "/decky-codex", keyboardActivations: 0, keyboardHides: 0, keyboardProps: null, keyboardRef: null, keyboardOpen: false,
   transport: new URLSearchParams(location.search).get("transport"),
   publish() { event?.({ ...state }); },
   request(kind) {
@@ -32,6 +32,23 @@ window.__test = {
     event?.({ ...state });
   }
 };
+let activeKeyboard = null;
+const manager = {
+  CreateVirtualKeyboardRef(props) {
+    const ref = {
+      SetAsCurrentVirtualKeyboardTarget() { activeKeyboard = ref; window.__test.keyboardProps = props; window.__test.keyboardRef = ref; },
+      ShowVirtualKeyboard() { if (window.__test.keyboardUnavailable) throw Error("Test: Steam keyboard unavailable"); if (!props.BIsElementValidForInput()) throw Error("Input is not focused"); ref.SetAsCurrentVirtualKeyboardTarget(); window.__test.keyboardActivations++; window.__test.keyboardOpen = true; },
+      HideVirtualKeyboard() { if (activeKeyboard === ref) { window.__test.keyboardHides++; window.__test.keyboardOpen = false; } },
+      BIsActive() { return activeKeyboard === ref && window.__test.keyboardOpen; }
+    };
+    return ref;
+  }
+};
+const steamWindow = { BrowserWindow: window, VirtualKeyboardManager: manager };
+const steamRouter = { WindowStore: {
+  GetWindowInstanceFromWindow: view => view === window ? steamWindow : null,
+  GamepadUIMainWindowInstance: { BrowserWindow: {}, VirtualKeyboardManager: { CreateVirtualKeyboardRef() { throw Error("Wrong Steam window"); } } }
+} };
 const api = {
   _version: 2,
   callable: () => async (method, params) => {
@@ -55,8 +72,12 @@ window.DFL = {
   DialogButton: Button, ButtonItem: Button,
   PanelSection: ({ children }) => h("section", {}, children), PanelSectionRow: ({ children }) => h("div", {}, children),
   Focusable: React.forwardRef(({ children, onActivate, onCancel, noFocusRing, focusClassName, focusWithinClassName, ...props }, ref) => h("div", { ...props, ref, tabIndex: 0, onKeyDown: e => { if (e.key === "Escape") { e.stopPropagation(); onCancel?.(e); } else if (e.key === "Enter" && e.target === e.currentTarget) onActivate?.(e); } }, children)),
-  TextField: ({ label, value, onChange, onKeyDown, disabled, bIsPassword }) => h("label", {}, label,
-    h("input", { "data-native-steam-field": true, type: bIsPassword ? "password" : "text", value, onChange, onClick: () => { window.__test.keyboardActivations++; }, onKeyDown: e => { if (e.key === "Enter" && !e.ctrlKey) window.__test.keyboardActivations++; onKeyDown?.(e); }, disabled })),
+  // DialogInputLabelGroup and DialogRequirementLabel must remain visible.
+  TextField: ({ label, value, onChange, onKeyDown, disabled, type = "text", onFocus, onClick, ...props }) => {
+    const control = h("div", { className: "DialogInput_Wrapper _DialogLayout" }, h("input", { "aria-label": props["aria-label"], className: "DialogInput DialogTextInputBase", "data-native-steam-field": true, type, value, onChange, onFocus, onClick, onKeyDown, disabled }));
+    return label ? h("div", { className: "DialogInputLabelGroup _DialogLayout DialogRequirementLabel" }, h("label", {}, h("div", { className: "DialogLabel" }, label), control)) : control;
+  },
+  Router: steamRouter,
   Dropdown: ({ rgOptions, selectedOption, onChange }) => h("select", { "aria-label": "Modell", value: selectedOption, onChange: e => onChange({ data: e.target.value }) }, rgOptions.map(o => h("option", { key: o.data, value: o.data }, o.label))),
   ConfirmModal: () => h("div"), showModal() {},
   Navigation: { Navigate: path => { backstack.push(path); render(path); }, CloseSideMenus() {}, NavigateBack() { if (backstack.length > 1) { backstack.pop(); render(backstack.at(-1)); } else window.__test.closed = true; }, NavigateToExternalWeb() {} }
