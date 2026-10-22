@@ -31,7 +31,7 @@ TOOLS = [
          {"sessionId": STRING, "value": STRING, "reason": STRING, "automatic": {"type": "boolean"}, "answerToken": STRING}, ["sessionId", "value", "reason"]),
     tool("decky_ask", "Ask the user a meaningful choice in a controller-friendly chat card. Explain the impact of each option. Wait for the answer; no default on timeout.",
          {"question": STRING, "sessionId": STRING, "options": {"type": "array", "items": {"type": "object", "properties": {"label": STRING, "description": STRING, "value": STRING}, "required": ["label", "description", "value"], "additionalProperties": False}}}, ["question", "options"]),
-    tool("decky_storage_scan", "Find large files by allocated bytes, excluding all known Steam libraries and sensitive data. Shows a real selectable table. Default root is the user's home. Never interpret a scan as deletion consent.",
+    tool("decky_storage_scan", "Find large files by allocated bytes, excluding all known Steam libraries and sensitive data. Return metadata to format as a Markdown table in the conversation; this is a model-invoked tool, not a dedicated UI feature. Default root is the user's home. Never interpret a scan as deletion consent.",
          {"roots": {"type": "array", "items": STRING}}),
     tool("decky_propose_cleanup", "Propose moving specifically selected inventory IDs to the trash. User must explicitly confirm; never delete permanently. Trash does not free space until emptied.",
          {"scanId": STRING, "ids": {"type": "array", "items": STRING}}, ["scanId", "ids"]),
@@ -248,8 +248,7 @@ class Service:
         allowed = {"snapshot": self.get_snapshot, "login": self.start_login, "logout": self.logout,
                    "new_chat": self.new_chat, "open_chat": self.open_chat, "rename_chat": self.rename_chat,
                    "delete_chat": self.delete_chat, "send": self.send, "interrupt": self.interrupt,
-                   "resolve": self.resolve, "scan": self.start_scan, "cleanup": self.start_cleanup,
-                   "cancel_scan": self.cancel_scan, "stop_session": self.stop_session,
+                   "resolve": self.resolve, "stop_session": self.stop_session,
                    "refresh_account": self.refresh_account}
         if method not in allowed or not isinstance(params, dict):
             raise ValueError("Unbekannte Anfrage.")
@@ -374,6 +373,7 @@ class Service:
                 raise
 
     async def interrupt(self, _):
+        self.inventory.cancelled = True
         for request in list(self.requests.values()):
             if not request["future"].done():
                 request["future"].set_exception(ValueError("Aufgabe abgebrochen."))
@@ -491,15 +491,6 @@ class Service:
         task = asyncio.create_task(run())
         self.tools_tasks.add(task)
         task.add_done_callback(self.tools_tasks.discard)
-
-    async def start_scan(self, params):
-        self.background(self.run_tool("decky_storage_scan", params))
-
-    async def cancel_scan(self, _):
-        self.inventory.cancelled = True
-
-    async def start_cleanup(self, params):
-        self.background(self.run_tool("decky_propose_cleanup", params))
 
     async def stop_session(self, params):
         session = self.sessions.get(params.get("id"))

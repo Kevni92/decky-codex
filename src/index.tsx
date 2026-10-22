@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { addEventListener, callable, definePlugin, removeEventListener, routerHook } from "@decky/api";
 import { ButtonItem, DialogButton, Dropdown, Focusable, Navigation, PanelSection, PanelSectionRow, TextField, ConfirmModal, showModal } from "@decky/ui";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { css } from "./theme";
 
 type Message = { id: string; role: string; text: string; activities?: State["activities"] };
 type Request = { id: string; kind: string; title: string; details: string; generation: string; options: { id: string; label: string; description: string; value: string }[] };
@@ -71,166 +72,199 @@ function useBackend() {
   }, []);
   const act = async (method: string, params: Record<string, unknown> = {}) => {
     setError("");
-    try { await rpc(method, params); } catch (e) { setError(e instanceof Error ? e.message : "Anfrage fehlgeschlagen"); }
+    try { await rpc(method, params); return true; } catch (e) { setError(e instanceof Error ? e.message : "Anfrage fehlgeschlagen"); return false; }
   };
   return { state, error, act, retry, connecting };
 }
-const css = `
-.dc{color:#e9eef5;font:16px/1.55 system-ui,sans-serif;--dc-muted:#a8b4c3;--dc-border:#344353}
-.dc *{box-sizing:border-box}.dc h1,.dc h2,.dc h3{line-height:1.3}.dc h1{font-size:26px}.dc h2{font-size:22px}.dc h3{font-size:19px}
-.dc pre{white-space:pre-wrap;word-break:break-word;background:#101822;border-radius:8px;padding:12px;font:13px/1.5 monospace;max-height:280px;overflow:auto}
-.dc code{font-size:.9em;color:#b5e3ec}.dc blockquote{border-left:3px solid #65c8dc;padding-left:14px;margin-left:0;color:#bdcbd8}
-.dc a{color:#83d9ec}.dc table{border-collapse:collapse;width:100%;font-size:14px}.dc th{background:#233446;text-align:left;color:#d6f3fb}
-.dc th,.dc td{padding:10px 12px;border-bottom:1px solid var(--dc-border);vertical-align:top}.dc tr:nth-child(even){background:#1b2733}.dc td{overflow-wrap:anywhere}
-.dc .dc-table{overflow:auto;max-width:100%}.dc .dc-card{background:#1c2937;border:1px solid var(--dc-border);border-radius:12px;padding:16px;margin:12px 0}
-.dc .dc-question{border-color:#70c9e1}.dc .dc-warning{border-color:#dcad68}.dc .dc-user{background:#263b4b;margin-left:10%;border-color:#426075}
-.dc .dc-message{padding:14px 18px;margin:16px 0;border-radius:12px;overflow-wrap:anywhere}.dc .dc-muted{color:var(--dc-muted);font-size:13px}
-.dc .dc-buttons{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}.dc .dc-buttons>*{flex:1;min-width:135px}.dc .dc-size{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
-.dc .dc-step{padding:10px 0;border-bottom:1px solid var(--dc-border)}.dc .dc-step:last-child{border:0}.dc .dc-role{color:#95cbd7;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em}
-.dc .dc-dot{display:inline-block;width:8px;height:8px;background:#71d2e1;border-radius:50%;margin-right:8px;animation:dc-pulse 1.5s infinite}
-@keyframes dc-pulse{50%{opacity:.3}}@media(prefers-reduced-motion:reduce){.dc .dc-dot{animation:none}}
-`;
+const CHAT_ROUTE = "/decky-codex";
+const SETTINGS_ROUTE = "/decky-codex/settings";
+let selectedModel = "";
+type Act = ReturnType<typeof useBackend>["act"];
+type IconName = "spark" | "new" | "chats" | "settings" | "back" | "sidebar" | "send" | "stop" | "chevron" | "trash" | "account" | "shield";
+function Icon({ name }: { name: IconName }) {
+  const paths: Record<IconName, ReactNode> = {
+    spark: <><path d="m12 3 2.3 6.7L21 12l-6.7 2.3L12 21l-2.3-6.7L3 12l6.7-2.3Z"/><path d="m20 2 .7 2.3L23 5l-2.3.7L20 8l-.7-2.3L17 5l2.3-.7Z"/></>,
+    new: <><path d="M12 20H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"/><path d="m15 5 4-4 4 4-12 12-5 1 1-5Z"/></>,
+    chats: <path d="M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-6 4V6a2 2 0 0 1 2-2Z"/>,
+    settings: <><path d="m9 3 1-2h4l1 2 3 2 2 1v4l-2 1v3l2 1v4l-3 1-2 2h-4l-1-2-3-2-2-1v-4l2-1V9L3 8V4l3-1Z" transform="translate(1 1) scale(.9)"/><circle cx="12" cy="12" r="3"/></>,
+    back: <path d="m14 5-7 7 7 7M7 12h14"/>,
+    sidebar: <><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/></>,
+    send: <path d="M12 20V4m-6 6 6-6 6 6"/>, stop: <rect x="6" y="6" width="12" height="12" rx="2"/>,
+    chevron: <path d="m9 5 7 7-7 7"/>,
+    trash: <><path d="M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7M14 10v7"/></>,
+    account: <><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/></>,
+    shield: <path d="m12 2 8 4v6c0 5-8 10-8 10S4 17 4 12V6Zm-4 9 3 3 5-5"/>,
+  };
+  return <svg className="dc-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
+}
+function Button({ label, icon, iconOnly = false, className = "", disabled, onClick, children }: {
+  label: string; icon?: IconName; iconOnly?: boolean; className?: string; disabled?: boolean; onClick: () => void; children?: ReactNode;
+}) {
+  return <DialogButton className={`dc-button ${iconOnly ? "dc-icon-button" : ""} ${className}`} disabled={disabled} onClick={onClick}>
+    {icon && <Icon name={icon} />}<span className={iconOnly ? "dc-sr-only" : "dc-truncate"}>{label}</span>{children}
+  </DialogButton>;
+}
 function openUrl(url: string) { if (/^https?:\/\//i.test(url)) Navigation.NavigateToExternalWeb(url); }
+function go(path: string) { Navigation.Navigate(path); Navigation.CloseSideMenus(); }
 function RichText({ text }: { text: string }) {
-  return <Markdown remarkPlugins={[remarkGfm]} skipHtml components={{
+  return <div className="dc-prose"><Markdown remarkPlugins={[remarkGfm]} skipHtml components={{
     a: ({ href, children }) => <a href={/^https?:\/\//i.test(href || "") ? href : undefined} onClick={e => { e.preventDefault(); if (href) openUrl(href); }}>{children}</a>,
     img: ({ alt }) => <span className="dc-muted">[Bild: {alt || "nicht automatisch geladen"}]</span>,
     table: ({ children }) => <Focusable className="dc-table"><table>{children}</table></Focusable>,
-  }}>{text}</Markdown>;
+  }}>{text}</Markdown></div>;
 }
-function Question({ request, act }: { request: Request; act: (m: string, p?: Record<string, unknown>) => Promise<void> }) {
+function Question({ request, act }: { request: Request; act: Act }) {
   const [password, setPassword] = useState("");
   const [answer, setAnswer] = useState("");
   const [sending, setSending] = useState(false);
+  const inFlight = useRef(false);
   const submit = async (choice: string) => {
-    setSending(true);
-    const secret = password;
-    setPassword("");
+    if (inFlight.current) return;
+    inFlight.current = true; setSending(true);
+    const secret = password; setPassword("");
     try { await act("resolve", { id: request.id, generation: request.generation, choice,
       ...(request.kind === "password" && choice !== "cancel" ? { password: secret } : {}),
       ...(request.kind === "text" ? { text: answer } : {}) }); }
-    finally { setSending(false); }
+    finally { inFlight.current = false; setSending(false); }
   };
-  return <section className={`dc-card dc-question ${request.kind === "root" ? "dc-warning" : ""}`}>
-    <div className="dc-role">{request.kind === "password" ? "Lokale Authentifizierung" : "Deine Entscheidung"}</div>
+  return <section className={`dc-question ${request.kind === "root" || request.kind === "password" ? "dc-root" : ""}`} aria-label="Deine Entscheidung">
+    <div className="dc-request-kind">{request.kind === "password" ? "Lokale Authentifizierung" : request.kind === "question" ? "Codex fragt dich" : "Deine Freigabe"}</div>
     <h3>{request.title}</h3>
-    <div style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{request.details}</div>
+    {request.details && <Focusable className="dc-question-details">{request.details}</Focusable>}
     {request.kind === "password" && <TextField label="Linux-Benutzerpasswort" bIsPassword value={password} onChange={e => setPassword(e.target.value)} disabled={sending} />}
-    {request.kind === "text" && <TextField label="Antwort" value={answer} onChange={e => setAnswer(e.target.value)} disabled={sending} />}
-    <div className="dc-buttons"><DialogButton disabled={sending} onClick={() => submit("cancel")}>Abbrechen / Ablehnen</DialogButton>
-      {!request.options.length && <DialogButton disabled={sending || (request.kind === "password" && !password)} onClick={() => submit("accept")}>{request.kind === "password" ? "Authentifizieren" : request.kind === "text" ? "Antwort senden" : "Einmal erlauben"}</DialogButton>}
+    {request.kind === "text" && <TextField label="Deine Antwort" value={answer} onChange={e => setAnswer(e.target.value)} disabled={sending} />}
+    {!!request.options.length && <div className="dc-choice-grid">{request.options.map(option => <DialogButton className="dc-button dc-choice" key={option.id} disabled={sending} onClick={() => { void submit(option.id); }}>
+      <strong>{option.label}</strong><span className="dc-choice-description">{option.description}</span>
+    </DialogButton>)}</div>}
+    <div className="dc-actions">
+      {!request.options.length && <Button className="dc-primary" disabled={sending || (request.kind === "password" && !password) || (request.kind === "text" && !answer.trim())} label={request.kind === "password" ? "Authentifizieren" : request.kind === "text" ? "Antwort senden" : "Einmal erlauben"} onClick={() => { void submit("accept"); }} />}
+      <Button label="Abbrechen / Ablehnen" disabled={sending} onClick={() => { void submit("cancel"); }} />
     </div>
-    {request.options.map(option => <div key={option.id} style={{ marginTop: 12 }}>
-      <DialogButton style={{ width: "100%" }} disabled={sending} onClick={() => submit(option.id)}>{option.label}</DialogButton>
-      <p className="dc-muted">{option.description}</p>
-    </div>)}
   </section>;
 }
-function Activity({ state }: { state: State }) {
+function Activity({ state, act }: { state: State; act?: Act }) {
   const [expanded, setExpanded] = useState(false);
-  if (!state.activities.length) return null;
+  const sessions = act ? state.sessions : [];
+  if (!state.activities.length && !sessions.length && !state.busy) return null;
   const working = state.activities.filter(a => a.status === "running");
-  const title = state.requests.length ? (state.requests[0].kind === "question" ? "Deine Entscheidung erforderlich" : "Bestätigung erforderlich")
-    : state.busy ? (working[working.length - 1]?.title || "Denkt nach …") : "Aktivitäten – technische Details";
-  return <div className="dc-card">
-    <DialogButton style={{ width: "100%", textAlign: "left" }} onClick={() => setExpanded(!expanded)}>
-      {state.busy && <span className="dc-dot" />}{expanded ? "▾ " : "▸ "}{title}
+  const title = state.requests.length ? "Wartet auf deine Entscheidung" : state.busy ? (working[working.length - 1]?.title || "Denkt nach …") : "Aktivitäten – technische Details";
+  return <div className="dc-activity">
+    <DialogButton className="dc-button dc-activity-toggle" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>
+      {state.busy ? <span className="dc-dot" /> : <Icon name="spark" />}<span>{title}</span><span className={`dc-chevron ${expanded ? "dc-open" : ""}`}><Icon name="chevron" /></span>
     </DialogButton>
-    {expanded && state.activities.map(a => <section className="dc-step" key={a.id}>
+    {expanded && <div>{state.activities.map(a => <section className="dc-step" key={a.id}>
       <strong>{a.status === "running" ? "◌ " : a.status === "failed" ? "! " : "✓ "}{a.title}</strong>
       {a.details && <Focusable><pre>{a.details}</pre></Focusable>}
-    </section>)}
+    </section>)}{sessions.map(session => <section className="dc-step" key={session.id}>
+      <strong>{session.running ? "Läuft: " : `Exit ${session.exitCode}: `}{session.label}</strong><Focusable><pre>{session.output || "Noch keine Ausgabe."}</pre></Focusable>
+      {session.running && <Button label="Prozess stoppen" icon="stop" onClick={() => { void act!("stop_session", { id: session.id }); }} />}
+    </section>)}</div>}
   </div>;
 }
-function bytes(n: number) { return `${(n / 1024 ** 3).toLocaleString("de-DE", { maximumFractionDigits: 2 })} GiB`; }
-function InventoryView({ state, act }: { state: State; act: (m: string, p?: Record<string, unknown>) => Promise<void> }) {
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const inventory = state.inventory;
-  useEffect(() => { setSelected(new Set()); }, [inventory?.id]);
-  if (!inventory) return null;
-  return <section className="dc-card">
-    <h3>Große Dateien außerhalb von Steam-Spielen</h3>
-    <p className="dc-muted">{inventory.metric} · {inventory.visited} Dateien geprüft · {inventory.errors} Zugriffsfehler</p>
-    {inventory.warnings.map((w, i) => <p key={i} style={{ color: "#f2c58b" }}>{w}</p>)}
-    <Focusable className="dc-table"><table><thead><tr><th>Auswahl</th><th>Name / Pfad</th><th className="dc-size">Größe</th><th>Einordnung</th></tr></thead>
-      <tbody>{inventory.rows.map(row => <tr key={row.id}>
-        <td><DialogButton onClick={() => { const next = new Set(selected); if (next.has(row.id)) next.delete(row.id); else next.add(row.id); setSelected(next); }}>{selected.has(row.id) ? "☑" : "☐"}</DialogButton></td>
-        <td><strong>{row.name}</strong><div className="dc-muted">{row.path}</div></td>
-        <td className="dc-size">{bytes(row.bytes)}</td><td>{row.category}</td>
-      </tr>)}</tbody></table></Focusable>
-    {!inventory.rows.length && <p>Keine Dateien über 1 MiB im untersuchten Bereich gefunden.</p>}
-    <div className="dc-buttons"><DialogButton disabled={!selected.size} onClick={() => act("cleanup", { scanId: inventory.id, ids: [...selected] })}>Auswahl in Papierkorb …</DialogButton></div>
-    <p className="dc-muted">Dateien werden erneut geprüft. Eine separate Bestätigung folgt. Der Papierkorb gibt Speicher erst beim Leeren frei.</p>
-  </section>;
+function Startup({ connection }: { connection: ReturnType<typeof useBackend> }) {
+  return <div className="dc dc-app dc-startup"><style>{css}</style><div><Icon name="spark" /><h1>Decky Codex</h1>
+    <p role={connection.error ? "alert" : "status"}>{connection.error || "Verbindung wird hergestellt …"}</p>
+    <Button className="dc-secondary" label="Erneut verbinden" disabled={connection.connecting} onClick={() => { void connection.retry(); }} />
+    {connection.error && <p className="dc-muted">Pluginprotokoll: homebrew/logs/Decky Codex</p>}
+  </div></div>;
 }
 function Chat() {
-  const { state, error, act, retry, connecting } = useBackend();
-  const [view, setView] = useState("chat");
+  const connection = useBackend();
+  const { state, error, act } = connection;
+  const [view, setView] = useState<"chat" | "history">("chat");
+  const [sidebar, setSidebar] = useState(true);
   const [draft, setDraft] = useState("");
-  const [model, setModel] = useState("");
   const [title, setTitle] = useState("");
+  const [sending, setSending] = useState(false);
+  const inFlight = useRef(false);
   const scroll = useRef<HTMLDivElement>(null);
-  const composer = useRef<HTMLTextAreaElement>(null);
   const follow = useRef(true);
   const chatId = state?.chat?.id || "new";
-  useEffect(() => { setDraft(drafts.get(chatId) || ""); setTitle(state?.chat?.title || ""); }, [chatId]);
-  useEffect(() => { if (follow.current && scroll.current) scroll.current.scrollTop = scroll.current.scrollHeight; }, [state?.chat?.messages.map(m => m.text).join("")]);
+  useEffect(() => { setDraft(drafts.get(chatId) || ""); setTitle(state?.chat?.title || ""); follow.current = true; }, [chatId]);
+  useEffect(() => { if (follow.current && scroll.current) scroll.current.scrollTop = scroll.current.scrollHeight; }, [state?.chat?.messages.map(m => m.text).join(""), view]);
   const send = async () => {
-    if (!draft.trim()) return;
+    if (!draft.trim() || !state || state.busy || inFlight.current) return;
+    inFlight.current = true; setSending(true);
     const text = draft;
     setDraft(""); drafts.delete(chatId);
-    try { await rpc("send", { text, model, nonce: crypto.randomUUID() }); }
-    catch { setDraft(text); drafts.set(chatId, text); }
+    try {
+      const ok = await act("send", { text, model: selectedModel, nonce: crypto.randomUUID() });
+      if (!ok) { setDraft(text); drafts.set(chatId, text); }
+    } finally { inFlight.current = false; setSending(false); }
   };
-  if (!state) return <div className="dc" style={{ padding: 60 }}><style>{css}</style><h2>Decky Codex</h2><p role={error ? "alert" : "status"}>{error || "Verbindung wird hergestellt …"}</p>
-    <DialogButton disabled={connecting} onClick={() => { void retry(); }}>Erneut verbinden</DialogButton>
-    <p className="dc-muted">Es werden noch keine Befehle ausgeführt. Falls der Start fehlschlägt: Pluginprotokoll unter homebrew/logs/Decky Codex prüfen.</p></div>;
-  return <div className="dc" style={{ padding: "52px 32px 20px", height: "100vh", overflowY: "auto", background: "#131e29" }}>
+  const chooseChat = async (id?: string) => {
+    if (await act(id ? "open_chat" : "new_chat", id ? { id } : {})) setView("chat");
+  };
+  if (!state) return <Startup connection={connection} />;
+  const running = state.busy || state.sessions.some(s => s.running);
+  return <Focusable className="dc dc-app" onCancel={() => Navigation.NavigateBack()}>
     <style>{css}</style>
-    <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16 }}>
-      <div><h1 style={{ margin: 0 }}>Decky Codex <span className="dc-muted">Preview {state.version}</span></h1><div className="dc-muted">{state.account ? `Angemeldet${state.account.email ? ` · ${state.account.email}` : ""}` : "Dein Assistent auf dem Steam Deck"}</div></div>
-      <div className="dc-buttons"><DialogButton onClick={() => setView(view === "history" ? "chat" : "history")}>Verlauf</DialogButton><DialogButton onClick={() => setView(view === "settings" ? "chat" : "settings")}>Einstellungen</DialogButton><DialogButton onClick={() => Navigation.NavigateBack()}>Zurück</DialogButton></div>
-    </header>
-    {(error || state.error) && <div className="dc-card dc-warning">{error || state.error}</div>}
-    {state.requests.map(request => <Question key={request.id} request={request} act={act} />)}
-    {view === "settings" ? <section className="dc-card"><h2>Konto und Einrichtung</h2>
-      <p>Codex verarbeitet Anfragen online über OpenAI. Freigegebene Datei- und Befehlsausgaben können Teil des Modellkontexts werden. Es gelten die Kontingente deines Kontos; kein automatischer API-Fallback.</p>
-      <div className="dc-buttons"><DialogButton onClick={() => act("refresh_account")}>Kontostatus prüfen</DialogButton><DialogButton onClick={() => act("login")}>Mit ChatGPT anmelden</DialogButton><DialogButton disabled={state.busy} onClick={() => act("logout")}>Abmelden</DialogButton></div>
-      {state.login && <div className="dc-card"><h3>Anmeldung bestätigen</h3><p>Öffne die offizielle Adresse am Deck oder auf deinem Smartphone:</p><p>{state.login.verificationUrl || state.login.authUrl}</p><h2>{state.login.userCode}</h2><DialogButton onClick={() => openUrl(state.login!.verificationUrl || state.login!.authUrl || "")}>Anmeldeseite öffnen</DialogButton><p className="dc-muted">Gerätecode-Anmeldung gegebenenfalls in den ChatGPT-Sicherheitseinstellungen erlauben.</p></div>}
-      <p>Host-Befehle werden einzeln bestätigt. Root-Aufträge benötigen zusätzlich dein Linux-Benutzerpasswort in einem getrennten lokalen Dialog. Die native Codex-Ausführung startet lesend.</p>
-      <p className="dc-muted">Native Runtime 0.163.0 · Linux x86_64 · Kein Desktop-/Steam-Deck-Hardwaretest in dieser Vorschau.</p>
-    </section> : view === "history" ? <section className="dc-card"><h2>Chatverlauf</h2><DialogButton disabled={state.busy} onClick={async () => { await act("new_chat"); setView("chat"); }}>Neuer Chat</DialogButton>
-      {state.chats.map(chat => <div className="dc-buttons" key={chat.id}><DialogButton disabled={state.busy} onClick={async () => { await act("open_chat", { id: chat.id }); setView("chat"); }}>{chat.title}</DialogButton><DialogButton disabled={state.busy} onClick={() => { showModal(<ConfirmModal strTitle="Chat löschen?" strDescription={`Chat „${chat.title}“ einschließlich Codex-Verlauf löschen?`} onOK={() => { void act("delete_chat", { id: chat.id }); }} />); }}>Löschen …</DialogButton></div>)}
-      {state.chat && <><TextField label="Titel des aktuellen Chats" value={title} onChange={e => setTitle(e.target.value)} /><DialogButton onClick={() => act("rename_chat", { id: state.chat!.id, title })}>Titel speichern</DialogButton></>}
-    </section> : <>
-      <div className="dc-buttons"><DialogButton disabled={state.busy} onClick={() => act("new_chat")}>Neuer Chat</DialogButton><DialogButton onClick={() => act("scan")}>Große Dateien untersuchen</DialogButton><DialogButton onClick={() => act("cancel_scan")}>Scan stoppen</DialogButton></div>
-      {!state.account && <div className="dc-card"><p>Verbinde deinen ChatGPT-Account, um mit Codex zu arbeiten. Die lokale Speicheranalyse kannst du bereits verwenden.</p><DialogButton onClick={() => { setView("settings"); void act("refresh_account"); }}>Konto einrichten</DialogButton></div>}
-      <div ref={scroll} onScroll={e => { const el = e.currentTarget; follow.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80; }} style={{ maxHeight: "45vh", overflowY: "auto", paddingRight: 8 }}>
-        {state.chat?.messages.map(message => message.role === "activity" ? <Activity key={message.id} state={{ ...state, busy: false, requests: [], activities: message.activities || [] }} /> : <article key={message.id} className={`dc-message ${message.role === "user" ? "dc-user" : ""}`}><div className="dc-role">{message.role === "user" ? "Du" : "Codex"}</div><RichText text={message.text} /></article>)}
-      </div>
-      <Activity state={state} />
-      {state.sessions.map(session => <div className="dc-card" key={session.id}><strong>{session.running ? "◌ Läuft: " : `Exit ${session.exitCode}: `}{session.label}</strong><Focusable><pre>{session.output || "Noch keine Ausgabe."}</pre></Focusable>{session.running && <DialogButton onClick={() => act("stop_session", { id: session.id })}>Prozess stoppen</DialogButton>}</div>)}
-      <InventoryView state={state} act={act} />
-      {state.models.length > 0 && <Dropdown rgOptions={state.models.map(m => ({ data: m.model || m.id, label: m.displayName || m.model || m.id }))} selectedOption={model || (state.models.find(m => m.isDefault)?.model || state.models[0].model || state.models[0].id)} onChange={o => setModel(String(o.data))} />}
-      <Focusable onActivate={() => composer.current?.focus()} onCancel={() => composer.current?.blur()}>
-        <label htmlFor="decky-codex-message">Deine Nachricht</label>
-        <textarea id="decky-codex-message" ref={composer} rows={3} value={draft} disabled={state.busy}
-          style={{ width: "100%", padding: 12, background: "#101822", color: "#edf4fa", border: "1px solid #526b80", borderRadius: 8, font: "inherit", resize: "vertical" }}
-          onChange={e => { setDraft(e.target.value); drafts.set(chatId, e.target.value); }}
-          onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); } }} />
-        <div className="dc-muted">A: Eingabe aktivieren · STEAM + X: Bildschirmtastatur · Umschalt + Enter: neue Zeile</div>
-      </Focusable>
-      <div className="dc-buttons"><DialogButton disabled={state.busy || !draft.trim()} onClick={send}>Senden</DialogButton><DialogButton disabled={!state.busy && !state.sessions.some(s => s.running)} onClick={() => act("interrupt")}>Aufgabe stoppen</DialogButton></div>
-    </>}
-  </div>;
+    <aside className={`dc-sidebar ${sidebar ? "" : "dc-collapsed"}`} aria-label="Chats und Navigation">
+      <div className="dc-brand">{sidebar && <span>Decky Codex</span>}<Button label={sidebar ? "Seitenleiste einklappen" : "Seitenleiste öffnen"} icon="sidebar" iconOnly onClick={() => setSidebar(!sidebar)} /></div>
+      <Button className="dc-nav-button" label="Neuer Chat" icon="new" iconOnly={!sidebar} disabled={state.busy || sending} onClick={() => { void chooseChat(); }} />
+      <Button className={`dc-nav-button ${view === "history" ? "dc-selected" : ""}`} label="Alle Chats" icon="chats" iconOnly={!sidebar} onClick={() => setView(view === "history" ? "chat" : "history")} />
+      {sidebar && <div className="dc-recent"><div className="dc-nav-label">Letzte Chats</div>{state.chats.slice(0, 12).map(chat => <Button key={chat.id} className={view === "chat" && chat.id === state.chat?.id ? "dc-selected" : ""} label={chat.title} disabled={state.busy || sending} onClick={() => { void chooseChat(chat.id); }} />)}{!state.chats.length && <p className="dc-muted" style={{ padding: "0 12px" }}>Deine Gespräche erscheinen hier.</p>}</div>}
+      <div className="dc-sidebar-bottom"><Button label="Einstellungen" icon="settings" iconOnly={!sidebar} onClick={() => go(SETTINGS_ROUTE)} /><Button label="Zurück zu Steam" icon="back" iconOnly={!sidebar} onClick={() => Navigation.NavigateBack()} /></div>
+    </aside>
+    <main className="dc-main" aria-label={view === "history" ? "Chatverlauf" : "Gespräch"}>
+      <header className="dc-topbar"><div className="dc-product"><span>Codex</span><span className="dc-chat-title dc-truncate">{view === "history" ? "Deine Gespräche" : state.chat?.title || "Neuer Chat"}</span></div><span className="dc-badge">STEAM DECK</span></header>
+      {(error || state.error) && <div className="dc-column" style={{ padding: "0 20px" }}><div className="dc-notice" role="alert">{error || state.error}</div></div>}
+      {view === "history" ? <div className="dc-page-scroll"><div className="dc-page"><div className="dc-page-heading"><h1>Deine Chats</h1><p>Öffne ein Gespräch oder beginne etwas Neues.</p></div>
+        {!!state.requests.length && <div className="dc-banner"><span>Codex wartet auf deine Entscheidung.</span><Button label="Entscheidung öffnen" onClick={() => setView("chat")} /></div>}
+        {state.chats.map(chat => <div className="dc-history-row" key={chat.id}><Button label={chat.title} icon="chats" disabled={state.busy || sending} onClick={() => { void chooseChat(chat.id); }} /><Button label={`Chat löschen: ${chat.title}`} icon="trash" iconOnly disabled={state.busy || sending} onClick={() => { showModal(<ConfirmModal strTitle="Chat löschen?" strDescription={`Chat „${chat.title}“ einschließlich Codex-Verlauf löschen?`} onOK={() => { void act("delete_chat", { id: chat.id }); }} />); }} /></div>)}
+        {!state.chats.length && <p className="dc-muted">Noch keine Gespräche gespeichert.</p>}
+        {state.chat && <section className="dc-setting-section" style={{ marginTop: 28 }}><h2>Aktuellen Chat umbenennen</h2><TextField label="Chattitel" value={title} onChange={e => setTitle(e.target.value)} /><div className="dc-actions"><Button label="Titel speichern" disabled={state.busy || !title.trim()} onClick={() => { void act("rename_chat", { id: state.chat!.id, title }); }} /></div></section>}
+      </div></div> : <div className="dc-chat-body">
+        <div className="dc-transcript" ref={scroll} onScroll={e => { const el = e.currentTarget; follow.current = el.scrollHeight - el.scrollTop - el.clientHeight < 90; }}>
+          <div className="dc-column">
+            {!state.account && <div className="dc-banner"><span>Verbinde dein ChatGPT-Konto, um loszulegen.</span><Button label="Konto verbinden" onClick={() => go(SETTINGS_ROUTE)} /></div>}
+            {state.chat?.messages.map(message => message.role === "activity" ? <Activity key={message.id} state={{ ...state, busy: false, requests: [], sessions: [], activities: message.activities || [] }} /> : <article key={message.id} className={`dc-message ${message.role === "user" ? "dc-user" : "dc-assistant"}`}>
+              {message.role !== "user" && <div className="dc-assistant-name"><Icon name="spark" />Codex</div>}<RichText text={message.text} />
+            </article>)}
+            {!!state.chat?.messages.length && <Activity state={state} act={act} />}
+          </div>
+          {!state.chat?.messages.length && <div className="dc-empty"><div className="dc-empty-symbol"><Icon name="spark" /></div><h1>Wobei kann ich dir helfen?</h1><p>Stell eine Frage oder gib deinem Steam Deck eine Aufgabe.</p>{running && <Activity state={state} act={act} />}</div>}
+        </div>
+        {!!state.requests.length && <div className="dc-request-tray" aria-label="Wartende Entscheidungen">{state.requests.map(request => <Question key={request.id} request={request} act={act} />)}</div>}
+        <footer className="dc-composer-area"><div className="dc-column"><div className="dc-composer">
+          <div className="dc-native-input">{!draft && <span className="dc-input-placeholder" aria-hidden="true">Frag Codex etwas …</span>}<TextField label={<span className="dc-sr-only">Nachricht an Codex</span>} value={draft} disabled={state.busy || sending} onChange={e => { setDraft(e.target.value); drafts.set(chatId, e.target.value); }} onKeyDown={e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); void send(); } }} /></div>
+          {running ? <Button className="dc-primary dc-send" label="Aufgabe stoppen" icon="stop" iconOnly onClick={() => { void act("interrupt"); }} /> : <Button className="dc-primary dc-send" label="Nachricht senden" icon="send" iconOnly disabled={sending || !draft.trim()} onClick={() => { void send(); }} />}
+        </div><p className="dc-composer-hint">A im Eingabefeld: Steam-Tastatur · Strg + Enter: senden · Änderungen werden vorab bestätigt.</p></div></footer>
+      </div>}
+    </main>
+  </Focusable>;
+}
+function Settings() {
+  const connection = useBackend();
+  const { state, error, act } = connection;
+  const [model, setModel] = useState(selectedModel);
+  // Opening account settings is an explicit read of the cached sign-in status.
+  useEffect(() => { void act("refresh_account"); }, []);
+  if (!state) return <Startup connection={connection} />;
+  return <Focusable className="dc dc-app" onCancel={() => go(CHAT_ROUTE)}><style>{css}</style><main className="dc-settings-shell" aria-label="Einstellungen">
+    <header className="dc-settings-header"><Button label="Zurück zum Chat" icon="back" onClick={() => go(CHAT_ROUTE)} /><span className="dc-muted">Decky Codex · {state.version}</span></header>
+    <div className="dc-page-scroll"><div className="dc-page"><div className="dc-page-heading"><h1>Einstellungen</h1><p>Konto, Modell und Freigaben für deinen Assistenten.</p></div>
+      {(error || state.error) && <div className="dc-notice" role="alert">{error || state.error}</div>}
+      {!!state.requests.length && <div className="dc-banner"><span>Codex wartet auf deine Entscheidung.</span><Button label="Entscheidung öffnen" onClick={() => go(CHAT_ROUTE)} /></div>}
+      <div className="dc-settings-grid">
+        <section className="dc-setting-section"><h2><Icon name="account" />ChatGPT-Konto</h2><div className="dc-account"><div className="dc-avatar">{state.account?.email?.slice(0, 1).toUpperCase() || <Icon name="account" />}</div><div><strong>{state.account ? "Verbunden" : "Nicht verbunden"}</strong><p>{state.account?.email || "Melde dich mit deinem ChatGPT-Konto an."}</p></div></div>
+          <div className="dc-actions">{!state.account ? <Button className="dc-primary" label="Mit ChatGPT anmelden" onClick={() => { void act("login"); }} /> : <Button className="dc-secondary" label="Abmelden" disabled={state.busy} onClick={() => { void act("logout"); }} />}<Button label="Status prüfen" onClick={() => { void act("refresh_account"); }} /></div>
+          {state.login && <div className="dc-login"><h3>Anmeldung bestätigen</h3><p>Öffne diese Adresse auf deinem Smartphone oder Steam Deck:</p><p style={{ overflowWrap: "anywhere" }}>{state.login.verificationUrl || state.login.authUrl}</p><code className="dc-code">{state.login.userCode}</code><Button className="dc-secondary" label="Anmeldeseite öffnen" onClick={() => openUrl(state.login!.verificationUrl || state.login!.authUrl || "")} /><p style={{ marginTop: 12 }}>Falls die Freigabe fehlt: ChatGPT im Webbrowser öffnen → Einstellungen → Sicherheit → Anmeldung per Gerätecode.</p></div>}
+        </section>
+        <section className="dc-setting-section"><h2><Icon name="spark" />Modell</h2><p>Wähle das Modell für deine nächsten Nachrichten.</p><div style={{ marginTop: 18 }}>{state.models.length ? <Dropdown rgOptions={state.models.map(m => ({ data: m.model || m.id, label: m.displayName || m.model || m.id }))} selectedOption={model || (state.models.find(m => m.isDefault)?.model || state.models[0].model || state.models[0].id)} onChange={o => { const value = String(o.data); selectedModel = value; setModel(value); }} /> : <p className="dc-muted">Verfügbare Modelle erscheinen nach der Anmeldung.</p>}</div><p style={{ marginTop: 20 }}>Es gelten die Kontingente deines ChatGPT-Kontos. Es erfolgt kein automatischer Wechsel zu einer kostenpflichtigen API.</p></section>
+        <section className="dc-setting-section dc-wide"><h2><Icon name="shield" />Deine Kontrolle</h2><p>Codex erklärt geplante Änderungen und fragt im Chat nach deiner Freigabe. Administratoraktionen benötigen zusätzlich dein Linux-Passwort in einem getrennten lokalen Eingabefeld.</p><p>Codex verarbeitet Anfragen online. Datei- und Befehlsausgaben, die für deine Aufgabe verwendet werden, können an OpenAI übermittelt werden. Chats werden lokal auf deinem Steam Deck gespeichert.</p></section>
+      </div><p className="dc-settings-footnote">Vorschau · Steam-Tastatur und Controller benötigen weiterhin eine Prüfung am echten Gerät.</p>
+    </div></div>
+  </main></Focusable>;
 }
 function Panel() {
   const { state, error } = useBackend();
-  return <PanelSection title="Decky Codex"><PanelSectionRow><div style={{ paddingBottom: 12 }}>{error || (!state ? "Verbindung wird hergestellt …" : state.requests.length ? "Deine Entscheidung wird benötigt" : state.busy ? "Codex arbeitet …" : "Bereit für deine nächste Aufgabe")}</div><ButtonItem layout="below" onClick={() => { Navigation.Navigate("/decky-codex"); Navigation.CloseSideMenus(); }}>Chat öffnen</ButtonItem></PanelSectionRow></PanelSection>;
+  return <PanelSection title="Decky Codex"><PanelSectionRow><div style={{ paddingBottom: 12 }}>{error || (!state ? "Verbindung wird hergestellt …" : state.requests.length ? "Deine Entscheidung wird benötigt" : state.busy ? "Codex arbeitet …" : "Dein Assistent auf dem Steam Deck")}</div><ButtonItem layout="below" onClick={() => go(CHAT_ROUTE)}>Chat öffnen</ButtonItem></PanelSectionRow></PanelSection>;
 }
 export default definePlugin(() => {
   const listener = addEventListener<[State]>("decky_codex_state", publish);
-  routerHook.addRoute("/decky-codex", Chat);
-  return { name: "Decky Codex", titleView: <div>Decky Codex</div>, icon: <span aria-hidden>✦</span>, content: <Panel />,
-    onDismount() { removeEventListener("decky_codex_state", listener); routerHook.removeRoute("/decky-codex"); listeners.clear(); current = undefined; drafts.clear(); } };
+  routerHook.addRoute(CHAT_ROUTE, Chat);
+  routerHook.addRoute(SETTINGS_ROUTE, Settings);
+  return { name: "Decky Codex", titleView: <div>Decky Codex</div>, icon: <Icon name="spark" />, content: <Panel />,
+    onDismount() { removeEventListener("decky_codex_state", listener); routerHook.removeRoute(CHAT_ROUTE); routerHook.removeRoute(SETTINGS_ROUTE); listeners.clear(); current = undefined; drafts.clear(); selectedModel = ""; } };
 });
