@@ -33,7 +33,9 @@ window.__test = {
   }
 };
 let activeKeyboard = null;
+window.SteamClient = { Input: { RegisterForControllerAnalogInputMessages(fn) { window.__test.analog = fn; return { unregister() { window.__test.analog = null; } }; } } };
 const manager = {
+  get IsShowingVirtualKeyboard() { return window.__test.keyboardOpen; },
   CreateVirtualKeyboardRef(props) {
     const ref = {
       SetAsCurrentVirtualKeyboardTarget() { activeKeyboard = ref; window.__test.keyboardProps = props; window.__test.keyboardRef = ref; },
@@ -59,22 +61,42 @@ const api = {
     if (method === "resolve") state.requests = [];
     if (method === "send") state.chat.messages.push({ id: "sent", role: "user", text: params.text });
     if (method === "new_chat") { state.chat = { id: "new-chat", title: "Neuer Chat", messages: [] }; state.activities = []; }
-    return { ok: true, state: { ...state } };
+    let result;
+    if (method === "voice_start") { window.__test.voiceState = "recording"; result = { token: "voice-test", state: "recording" }; }
+    if (method === "voice_finish") window.__test.voiceState = "done";
+    if (method === "voice_status") result = { state: window.__test.voiceFailure ? "failed" : window.__test.voiceState, seconds: 3, text: "Installiere bitte Programm X", error: "Test: Mikrofon fehlt" };
+    if (method === "voice_cancel") window.__test.voiceState = "idle";
+    return { ok: true, result, state: { ...state } };
   },
   addEventListener: (_, handler) => { event = handler; return handler; },
   removeEventListener() {},
   routerHook: { addRoute: (path, component, props = {}) => routes.set(path, { component, exact: props.exact }), removeRoute(path) { routes.delete(path); } }
 };
+function navigate(e) {
+  const key = e.key;
+  if (!["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(key) || e.target.tagName === "INPUT") return;
+  const vertical = key === "ArrowUp" || key === "ArrowDown";
+  let scope = e.target.parentElement.closest("[flow-children]");
+  while (scope) {
+    const flow = scope.getAttribute("flow-children");
+    if ((vertical && flow === "column") || (!vertical && flow === "row")) {
+      const controls = [...scope.querySelectorAll("button:not(:disabled), input:not(:disabled)")].filter(el => el.getClientRects().length);
+      const index = controls.indexOf(e.target), next = controls[index + (["ArrowUp", "ArrowLeft"].includes(key) ? -1 : 1)];
+      if (index >= 0 && next) { e.preventDefault(); e.stopPropagation(); next.focus(); return; }
+    }
+    scope = scope.parentElement.closest("[flow-children]");
+  }
+}
 const Button = ({ children, onClick, disabled, style, className, ...props }) => h("button", { onClick, disabled, style, className, "aria-expanded": props["aria-expanded"] }, children);
 window.SP_REACT = React;
 window.SP_JSX = jsx;
 window.DFL = {
   DialogButton: Button, ButtonItem: Button,
   PanelSection: ({ children }) => h("section", {}, children), PanelSectionRow: ({ children }) => h("div", {}, children),
-  Focusable: React.forwardRef(({ children, onActivate, onCancel, noFocusRing, focusClassName, focusWithinClassName, ...props }, ref) => h("div", { ...props, ref, tabIndex: 0, onKeyDown: e => { if (e.key === "Escape") { e.stopPropagation(); onCancel?.(e); } else if (e.key === "Enter" && e.target === e.currentTarget) onActivate?.(e); } }, children)),
+  Focusable: React.forwardRef(({ children, onActivate, onCancel, noFocusRing, focusClassName, focusWithinClassName, ...props }, ref) => h("div", { ...props, ref, tabIndex: 0, onKeyDown: e => { navigate(e); if (e.key === "Escape") { e.stopPropagation(); onCancel?.(e); } else if (e.key === "Enter" && e.target === e.currentTarget) onActivate?.(e); } }, children)),
   // DialogInputLabelGroup and DialogRequirementLabel must remain visible.
-  TextField: ({ label, value, onChange, onKeyDown, disabled, type = "text", onFocus, onClick, ...props }) => {
-    const control = h("div", { className: "DialogInput_Wrapper _DialogLayout" }, h("input", { "aria-label": props["aria-label"], className: "DialogInput DialogTextInputBase", "data-native-steam-field": true, type, value, onChange, onFocus, onClick, onKeyDown, disabled }));
+  TextField: ({ label, value, onChange, onKeyDown, disabled, type = "text", placeholder, onFocus, onClick, ...props }) => {
+    const control = h("div", { className: "DialogInput_Wrapper _DialogLayout" }, h("input", { "aria-label": props["aria-label"], placeholder, className: "DialogInput DialogTextInputBase", "data-native-steam-field": true, type, value, onChange, onFocus, onClick, onKeyDown, disabled }));
     return label ? h("div", { className: "DialogInputLabelGroup _DialogLayout DialogRequirementLabel" }, h("label", {}, h("div", { className: "DialogLabel" }, label), control)) : control;
   },
   Router: steamRouter,

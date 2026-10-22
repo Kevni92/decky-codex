@@ -4,6 +4,8 @@ import { ButtonItem, DialogButton, Dropdown, Focusable, Navigation, PanelSection
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { css } from "./theme";
+import { Dictation } from "./Dictation";
+import { useChatScroll } from "./useChatScroll";
 import { SteamTextInput } from "./SteamTextInput";
 import { useRouteFrame } from "./useRouteFrame";
 
@@ -22,7 +24,7 @@ type State = {
   sessions: { id: string; label: string; output: string; running: boolean; exitCode: number | null }[];
   inventory: null | { id: string; rows: Row[]; warnings: string[]; errors: number; metric: string; visited: number };
 };
-type Reply = { ok: boolean; error?: string; state: State };
+type Reply = { result?: { token?: string; state: string; seconds?: number; text?: string; error?: string }; ok: boolean; error?: string; state: State };
 const backend = callable<[method: string, params: Record<string, unknown>], Reply>("dispatch");
 const listeners = new Set<(s: State) => void>();
 const drafts = new Map<string, string>();
@@ -135,13 +137,13 @@ function Question({ request, act }: { request: Request; act: Act }) {
     {request.details && <Focusable className="dc-question-details">{request.details}</Focusable>}
     {request.kind === "password" && <SteamTextInput label="Linux-Benutzerpasswort" password value={password} onChange={setPassword} disabled={sending} />}
     {request.kind === "text" && <SteamTextInput label="Deine Antwort" value={answer} onChange={setAnswer} disabled={sending} />}
-    {!!request.options.length && <div className="dc-choice-grid">{request.options.map(option => <DialogButton className="dc-button dc-choice" key={option.id} disabled={sending} onClick={() => { void submit(option.id); }}>
+    {!!request.options.length && <Focusable className="dc-choice-grid" flow-children="grid">{request.options.map(option => <DialogButton className="dc-button dc-choice" key={option.id} disabled={sending} onClick={() => { void submit(option.id); }}>
       <strong>{option.label}</strong><span className="dc-choice-description">{option.description}</span>
-    </DialogButton>)}</div>}
-    <div className="dc-actions">
+    </DialogButton>)}</Focusable>}
+    <Focusable className="dc-actions" flow-children="row">
       {!request.options.length && <Button className="dc-primary" disabled={sending || (request.kind === "password" && !password) || (request.kind === "text" && !answer.trim())} label={request.kind === "password" ? "Authentifizieren" : request.kind === "text" ? "Antwort senden" : "Einmal erlauben"} onClick={() => { void submit("accept"); }} />}
       <Button label="Abbrechen / Ablehnen" disabled={sending} onClick={() => { void submit("cancel"); }} />
-    </div>
+    </Focusable>
   </section>;
 }
 function Activity({ state, act }: { state: State; act?: Act }) {
@@ -180,6 +182,8 @@ function Chat() {
   const [draft, setDraft] = useState("");
   const [title, setTitle] = useState("");
   const [sending, setSending] = useState(false);
+  const [voiceBusy, setVoiceBusy] = useState(false);
+  useChatScroll(frame, !!state);
   const inFlight = useRef(false);
   const scroll = useRef<HTMLDivElement>(null);
   const follow = useRef(true);
@@ -187,7 +191,7 @@ function Chat() {
   useEffect(() => { setDraft(drafts.get(chatId) || ""); setTitle(state?.chat?.title || ""); follow.current = true; }, [chatId]);
   useEffect(() => { if (follow.current && scroll.current) scroll.current.scrollTop = scroll.current.scrollHeight; }, [state?.chat?.messages.map(m => m.text).join(""), view]);
   const send = async () => {
-    if (!draft.trim() || !state || state.busy || inFlight.current) return;
+    if (!draft.trim() || !state || state.busy || voiceBusy || inFlight.current) return;
     inFlight.current = true; setSending(true);
     const text = draft;
     setDraft(""); drafts.delete(chatId);
@@ -201,25 +205,25 @@ function Chat() {
   };
   if (!state) return <Startup connection={connection} />;
   const running = state.busy || state.sessions.some(s => s.running);
-  return <Focusable ref={frame} className="dc dc-app" onCancel={() => Navigation.NavigateBack()}>
+  return <Focusable ref={frame} className="dc dc-app" flow-children="row" onCancel={() => Navigation.NavigateBack()}>
     <style>{css}</style>
-    <aside className={`dc-sidebar ${sidebar ? "" : "dc-collapsed"}`} aria-label="Chats und Navigation">
-      <div className="dc-brand">{sidebar && <span>Decky Codex</span>}<Button label={sidebar ? "Seitenleiste einklappen" : "Seitenleiste öffnen"} icon="sidebar" iconOnly onClick={() => setSidebar(!sidebar)} /></div>
-      <Button className="dc-nav-button" label="Neuer Chat" icon="new" iconOnly={!sidebar} disabled={state.busy || sending} onClick={() => { void chooseChat(); }} />
-      <Button className={`dc-nav-button ${view === "history" ? "dc-selected" : ""}`} label="Alle Chats" icon="chats" iconOnly={!sidebar} onClick={() => setView(view === "history" ? "chat" : "history")} />
-      {sidebar && <div className="dc-recent"><div className="dc-nav-label">Letzte Chats</div>{state.chats.slice(0, 12).map(chat => <Button key={chat.id} className={view === "chat" && chat.id === state.chat?.id ? "dc-selected" : ""} label={chat.title} disabled={state.busy || sending} onClick={() => { void chooseChat(chat.id); }} />)}{!state.chats.length && <p className="dc-muted" style={{ padding: "0 12px" }}>Deine Gespräche erscheinen hier.</p>}</div>}
-      <div className="dc-sidebar-bottom"><Button label="Einstellungen" icon="settings" iconOnly={!sidebar} onClick={() => go(SETTINGS_ROUTE)} /><Button label="Zurück zu Steam" icon="back" iconOnly={!sidebar} onClick={() => Navigation.NavigateBack()} /></div>
-    </aside>
-    <main className="dc-main" aria-label={view === "history" ? "Chatverlauf" : "Gespräch"}>
+    <Focusable role="complementary" flow-children="column" className={`dc-sidebar ${sidebar ? "" : "dc-collapsed"}`} aria-label="Chats und Navigation">
+      <Focusable className="dc-brand" flow-children="row">{sidebar && <span>Decky Codex</span>}<Button label={sidebar ? "Seitenleiste einklappen" : "Seitenleiste öffnen"} icon="sidebar" iconOnly onClick={() => setSidebar(!sidebar)} /></Focusable>
+      <Button className="dc-nav-button" label="Neuer Chat" icon="new" iconOnly={!sidebar} disabled={state.busy || sending || voiceBusy} onClick={() => { void chooseChat(); }} />
+      <Button className={`dc-nav-button ${view === "history" ? "dc-selected" : ""}`} label="Alle Chats" disabled={voiceBusy} icon="chats" iconOnly={!sidebar} onClick={() => setView(view === "history" ? "chat" : "history")} />
+      {sidebar && <Focusable className="dc-recent" flow-children="column"><div className="dc-nav-label">Letzte Chats</div>{state.chats.slice(0, 12).map(chat => <Button key={chat.id} className={view === "chat" && chat.id === state.chat?.id ? "dc-selected" : ""} label={chat.title} disabled={state.busy || sending || voiceBusy} onClick={() => { void chooseChat(chat.id); }} />)}{!state.chats.length && <p className="dc-muted" style={{ padding: "0 12px" }}>Deine Gespräche erscheinen hier.</p>}</Focusable>}
+      <Focusable className="dc-sidebar-bottom" flow-children="column"><Button label="Einstellungen" icon="settings" iconOnly={!sidebar} onClick={() => go(SETTINGS_ROUTE)} /><Button label="Zurück zu Steam" icon="back" iconOnly={!sidebar} onClick={() => Navigation.NavigateBack()} /></Focusable>
+    </Focusable>
+    <Focusable role="main" flow-children="column" className="dc-main" aria-label={view === "history" ? "Chatverlauf" : "Gespräch"}>
       <header className="dc-topbar"><div className="dc-product"><span>Codex</span><span className="dc-chat-title dc-truncate">{view === "history" ? "Deine Gespräche" : state.chat?.title || "Neuer Chat"}</span></div><span className="dc-badge">STEAM DECK</span></header>
       {(error || state.error) && <div className="dc-column" style={{ padding: "0 20px" }}><div className="dc-notice" role="alert">{error || state.error}</div></div>}
-      {view === "history" ? <div className="dc-page-scroll"><div className="dc-page"><div className="dc-page-heading"><h1>Deine Chats</h1><p>Öffne ein Gespräch oder beginne etwas Neues.</p></div>
+      {view === "history" ? <Focusable className="dc-page-scroll" flow-children="column"><div className="dc-page"><div className="dc-page-heading"><h1>Deine Chats</h1><p>Öffne ein Gespräch oder beginne etwas Neues.</p></div>
         {!!state.requests.length && <div className="dc-banner"><span>Codex wartet auf deine Entscheidung.</span><Button label="Entscheidung öffnen" onClick={() => setView("chat")} /></div>}
-        {state.chats.map(chat => <div className="dc-history-row" key={chat.id}><Button label={chat.title} icon="chats" disabled={state.busy || sending} onClick={() => { void chooseChat(chat.id); }} /><Button label={`Chat löschen: ${chat.title}`} icon="trash" iconOnly disabled={state.busy || sending} onClick={() => { showModal(<ConfirmModal strTitle="Chat löschen?" strDescription={`Chat „${chat.title}“ einschließlich Codex-Verlauf löschen?`} onOK={() => { void act("delete_chat", { id: chat.id }); }} />); }} /></div>)}
+        {state.chats.map(chat => <Focusable flow-children="row" className="dc-history-row" key={chat.id}><Button label={chat.title} icon="chats" disabled={state.busy || sending || voiceBusy} onClick={() => { void chooseChat(chat.id); }} /><Button label={`Chat löschen: ${chat.title}`} icon="trash" iconOnly disabled={state.busy || sending || voiceBusy} onClick={() => { showModal(<ConfirmModal strTitle="Chat löschen?" strDescription={`Chat „${chat.title}“ einschließlich Codex-Verlauf löschen?`} onOK={() => { void act("delete_chat", { id: chat.id }); }} />); }} /></Focusable>)}
         {!state.chats.length && <p className="dc-muted">Noch keine Gespräche gespeichert.</p>}
-        {state.chat && <section className="dc-setting-section" style={{ marginTop: 28 }}><h2>Aktuellen Chat umbenennen</h2><SteamTextInput label="Chattitel" value={title} onChange={setTitle} /><div className="dc-actions"><Button label="Titel speichern" disabled={state.busy || !title.trim()} onClick={() => { void act("rename_chat", { id: state.chat!.id, title }); }} /></div></section>}
-      </div></div> : <div className="dc-chat-body">
-        <div className="dc-transcript" ref={scroll} onScroll={e => { const el = e.currentTarget; follow.current = el.scrollHeight - el.scrollTop - el.clientHeight < 90; }}>
+        {state.chat && <section className="dc-setting-section" style={{ marginTop: 28 }}><h2>Aktuellen Chat umbenennen</h2><SteamTextInput label="Chattitel" value={title} onChange={setTitle} /><Focusable className="dc-actions" flow-children="row"><Button label="Titel speichern" disabled={state.busy || !title.trim()} onClick={() => { void act("rename_chat", { id: state.chat!.id, title }); }} /></Focusable></section>}
+      </div></Focusable> : <Focusable className="dc-chat-body" flow-children="column">
+        <Focusable flow-children="column" aria-label="Chattext" className="dc-transcript" ref={scroll} onScroll={e => { const el = e.currentTarget; follow.current = el.scrollHeight - el.scrollTop - el.clientHeight < 90; }}>
           <div className="dc-column">
             {!state.account && <div className="dc-banner"><span>Verbinde dein ChatGPT-Konto, um loszulegen.</span><Button label="Konto verbinden" onClick={() => go(SETTINGS_ROUTE)} /></div>}
             {state.chat?.messages.map(message => message.role === "activity" ? <Activity key={message.id} state={{ ...state, busy: false, requests: [], sessions: [], activities: message.activities || [] }} /> : <article key={message.id} className={`dc-message ${message.role === "user" ? "dc-user" : "dc-assistant"}`}>
@@ -228,14 +232,15 @@ function Chat() {
             {!!state.chat?.messages.length && <Activity state={state} act={act} />}
           </div>
           {!state.chat?.messages.length && <div className="dc-empty"><div className="dc-empty-symbol"><Icon name="spark" /></div><h1>Wobei kann ich dir helfen?</h1><p>Stell eine Frage oder gib deinem Steam Deck eine Aufgabe.</p>{running && <Activity state={state} act={act} />}</div>}
-        </div>
-        {!!state.requests.length && <div className="dc-request-tray" aria-label="Wartende Entscheidungen">{state.requests.map(request => <Question key={request.id} request={request} act={act} />)}</div>}
-        <footer className="dc-composer-area"><div className="dc-column"><div className="dc-composer">
-          <div className="dc-native-input">{!draft && <span className="dc-input-placeholder" aria-hidden="true">Frag Codex etwas …</span>}<SteamTextInput compact label="Nachricht an Codex" value={draft} disabled={state.busy || sending} onChange={value => { setDraft(value); drafts.set(chatId, value); }} onKeyDown={e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); void send(); } }} /></div>
-          {running ? <Button className="dc-primary dc-send" label="Aufgabe stoppen" icon="stop" iconOnly onClick={() => { void act("interrupt"); }} /> : <Button className="dc-primary dc-send" label="Nachricht senden" icon="send" iconOnly disabled={sending || !draft.trim()} onClick={() => { void send(); }} />}
-        </div><p className="dc-composer-hint">A oder Tastatursymbol: Eingabe öffnen · Strg + Enter: senden · Änderungen werden vorab bestätigt.</p></div></footer>
-      </div>}
-    </main>
+        </Focusable>
+        {!!state.requests.length && <Focusable flow-children="column" className="dc-request-tray" aria-label="Wartende Entscheidungen">{state.requests.map(request => <Question key={request.id} request={request} act={act} />)}</Focusable>}
+        <footer className="dc-composer-area"><div className="dc-column"><Focusable className="dc-composer" flow-children="row">
+          <div className="dc-native-input"><SteamTextInput compact label="Nachricht an Codex" value={draft} disabled={state.busy || sending || voiceBusy} onChange={value => { setDraft(value); drafts.set(chatId, value); }} onKeyDown={e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); void send(); } }} /></div>
+          <Dictation rpc={rpc} disabled={state.busy || sending} onBusy={setVoiceBusy} onText={text => { setDraft(value => { const next = value ? `${value} ${text}` : text; drafts.set(chatId, next); return next; }); }} />
+          {running ? <Button className="dc-primary dc-send" label="Aufgabe stoppen" icon="stop" iconOnly onClick={() => { void act("interrupt"); }} /> : <Button className="dc-primary dc-send" label="Nachricht senden" icon="send" iconOnly disabled={sending || voiceBusy || !draft.trim()} onClick={() => { void send(); }} />}
+        </Focusable><p className="dc-composer-hint">A oder Tastatursymbol: Eingabe öffnen · Strg + Enter: senden · Rechter Stick: Chat scrollen</p></div></footer>
+      </Focusable>}
+    </Focusable>
   </Focusable>;
 }
 function Settings() {
@@ -243,24 +248,25 @@ function Settings() {
   const connection = useBackend();
   const { state, error, act } = connection;
   const [model, setModel] = useState(selectedModel);
+  useChatScroll(frame, !!state);
   // Opening account settings is an explicit read of the cached sign-in status.
   useEffect(() => { void act("refresh_account"); }, []);
   if (!state) return <Startup connection={connection} />;
-  return <Focusable ref={frame} className="dc dc-app" onCancel={() => Navigation.NavigateBack()}><style>{css}</style><main className="dc-settings-shell" aria-label="Einstellungen">
+  return <Focusable ref={frame} className="dc dc-app" flow-children="row" onCancel={() => Navigation.NavigateBack()}><style>{css}</style><Focusable role="main" flow-children="column" className="dc-settings-shell" aria-label="Einstellungen">
     <header className="dc-settings-header"><Button label="Zurück zum Chat" icon="back" onClick={() => Navigation.NavigateBack()} /><span className="dc-muted">Decky Codex · {state.version}</span></header>
-    <div className="dc-page-scroll"><div className="dc-page"><div className="dc-page-heading"><h1>Einstellungen</h1><p>Konto, Modell und Freigaben für deinen Assistenten.</p></div>
+    <Focusable className="dc-page-scroll" flow-children="column"><div className="dc-page"><div className="dc-page-heading"><h1>Einstellungen</h1><p>Konto, Modell und Freigaben für deinen Assistenten.</p></div>
       {(error || state.error) && <div className="dc-notice" role="alert">{error || state.error}</div>}
       {!!state.requests.length && <div className="dc-banner"><span>Codex wartet auf deine Entscheidung.</span><Button label="Entscheidung öffnen" onClick={() => Navigation.NavigateBack()} /></div>}
-      <div className="dc-settings-grid">
+      <Focusable className="dc-settings-grid" flow-children="grid">
         <section className="dc-setting-section"><h2><Icon name="account" />ChatGPT-Konto</h2><div className="dc-account"><div className="dc-avatar">{state.account?.email?.slice(0, 1).toUpperCase() || <Icon name="account" />}</div><div><strong>{state.account ? "Verbunden" : "Nicht verbunden"}</strong><p>{state.account?.email || "Melde dich mit deinem ChatGPT-Konto an."}</p></div></div>
-          <div className="dc-actions">{!state.account ? <Button className="dc-primary" label="Mit ChatGPT anmelden" onClick={() => { void act("login"); }} /> : <Button className="dc-secondary" label="Abmelden" disabled={state.busy} onClick={() => { void act("logout"); }} />}<Button label="Status prüfen" onClick={() => { void act("refresh_account"); }} /></div>
+          <Focusable className="dc-actions" flow-children="row">{!state.account ? <Button className="dc-primary" label="Mit ChatGPT anmelden" onClick={() => { void act("login"); }} /> : <Button className="dc-secondary" label="Abmelden" disabled={state.busy} onClick={() => { void act("logout"); }} />}<Button label="Status prüfen" onClick={() => { void act("refresh_account"); }} /></Focusable>
           {state.login && <div className="dc-login"><h3>Anmeldung bestätigen</h3><p>Öffne diese Adresse auf deinem Smartphone oder Steam Deck:</p><p style={{ overflowWrap: "anywhere" }}>{state.login.verificationUrl || state.login.authUrl}</p><code className="dc-code">{state.login.userCode}</code><Button className="dc-secondary" label="Anmeldeseite öffnen" onClick={() => openUrl(state.login!.verificationUrl || state.login!.authUrl || "")} /><p style={{ marginTop: 12 }}>Falls die Freigabe fehlt: ChatGPT im Webbrowser öffnen → Einstellungen → Sicherheit → Anmeldung per Gerätecode.</p></div>}
         </section>
         <section className="dc-setting-section"><h2><Icon name="spark" />Modell</h2><p>Wähle das Modell für deine nächsten Nachrichten.</p><div style={{ marginTop: 18 }}>{state.models.length ? <Dropdown rgOptions={state.models.map(m => ({ data: m.model || m.id, label: m.displayName || m.model || m.id }))} selectedOption={model || (state.models.find(m => m.isDefault)?.model || state.models[0].model || state.models[0].id)} onChange={o => { const value = String(o.data); selectedModel = value; setModel(value); }} /> : <p className="dc-muted">Verfügbare Modelle erscheinen nach der Anmeldung.</p>}</div><p style={{ marginTop: 20 }}>Es gelten die Kontingente deines ChatGPT-Kontos. Es erfolgt kein automatischer Wechsel zu einer kostenpflichtigen API.</p></section>
         <section className="dc-setting-section dc-wide"><h2><Icon name="shield" />Deine Kontrolle</h2><p>Codex erklärt geplante Änderungen und fragt im Chat nach deiner Freigabe. Administratoraktionen benötigen zusätzlich dein Linux-Passwort in einem getrennten lokalen Eingabefeld.</p><p>Codex verarbeitet Anfragen online. Datei- und Befehlsausgaben, die für deine Aufgabe verwendet werden, können an OpenAI übermittelt werden. Chats werden lokal auf deinem Steam Deck gespeichert.</p></section>
-      </div><p className="dc-settings-footnote">Vorschau · Deine Freigabe gilt jeweils nur für die angezeigte Aktion.</p>
-    </div></div>
-  </main></Focusable>;
+      </Focusable><p className="dc-settings-footnote">Vorschau · Deine Freigabe gilt jeweils nur für die angezeigte Aktion.</p>
+    </div></Focusable>
+  </Focusable></Focusable>;
 }
 function Panel() {
   const { state, error } = useBackend();

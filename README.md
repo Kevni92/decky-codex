@@ -19,12 +19,30 @@ ChatGPT-Konto. Es gelten dessen Kontingente; keine automatische API-Abrechnung.
 
 - Aufgeräumter deutscher Chat mit Seitenleiste, Markdown, Tabellen und aufklappbaren Aktivitäten.
 - Eigene Einstellungsseite für Konto, Modell und Freigaben; native Steam-Texteingabe.
+- Steuerkreuz für die Navigation; rechter Stick scrollt den Chat.
+- Lokale deutsche Spracheingabe per Mikrofon; erkannter Text bleibt vor dem Senden bearbeitbar.
 - Lokaler Verlauf, Titel, neue Chats und echte Codex-Verlaufslöschung.
 - Auswahlfragen mit erklärten Optionen; Installer mit fortlaufender Ausgabe und Eingaben.
 - Aufgaben wie „Welche Dateien brauchen am meisten Platz?“ direkt im Chat stellen.
   Codex kann Ergebnisse als Tabelle darstellen und Aufräumvorschläge gesondert bestätigen lassen.
 - Hostbefehle einzeln freigeben. Root-Aufträge zusätzlich mit lokalem Linux-Passwort.
 - Mitgelieferte AGENTS.md und sechs auf Steam Deck zugeschnittene Skills.
+
+## Spracheingabe
+
+Im Chat das **Mikrofon** wählen, sprechen und mit demselben Button beenden.
+Nach spätestens 30 Sekunden endet die Aufnahme automatisch. Whisper erkennt
+Deutsch lokal auf dem Deck; das mitgelieferte Modell benötigt rund 57 MiB.
+Kein API-Schlüssel, kein Audio-Upload, keine zusätzlichen API-Kosten. Erst
+**Nachricht senden** übermittelt den bearbeitbaren Text an Codex.
+
+Das Standard-Eingabegerät aus den Steam-Audioeinstellungen wird über `pw-record`
+(PipeWire auf SteamOS) aufgenommen. **Verwerfen**, Navigation aus dem Chat und
+Plugin-Ende stoppen die Aufnahme. Bei Verbindungsabbruch greift ein Acht-Sekunden-
+Zeitlimit. Audio bleibt während der Aufnahme im RAM; die private WAV-Datei für
+Whisper wird nach Erkennung, Fehler oder Abbruch entfernt. Keine Audio-Historie.
+Die lokale Erkennung benötigt nach dem Stoppen etwas Rechenzeit und kann sich
+bei laufenden Spielen verlangsamen. Namen/Befehle vor dem Senden prüfen.
 
 ## Rechte und Daten
 
@@ -43,7 +61,7 @@ keine Dokumentinhalte. Der Papierkorb gibt erst nach Leerung Speicher frei.
 
 Build, Backendtests, reale PTY-Steuerung und der echte lokale Codex-Protokollstart
 werden automatisiert geprüft. Ein echtes Steam Deck steht in der Entwicklungsumgebung
-nicht zur Verfügung: Gaming-Modus, Bildschirmtastatur, Kontozugang und sudo/PAM
+nicht zur Verfügung: Gaming-Modus, Bildschirmtastatur, Mikrofon, Controller-Scrollen, Kontozugang und sudo/PAM
 müssen deshalb am Gerät geprüft werden. Fehler bitte mit Plugin-/Decky-Version und
 bereinigter Fehlermeldung melden; niemals Passwörter oder auth.json anhängen.
 
@@ -56,7 +74,7 @@ durch andere Prozesse desselben Benutzers oder Root gibt es keine vollständige 
 ## Entwicklung und Veröffentlichung
 
 `npm ci`, `npm run typecheck`, `npm run build`, `npm test`,
-`python3 scripts/prepare_runtime.py`, `python3 scripts/smoke.py`,
+`python3 scripts/prepare_runtime.py`, `python3 scripts/prepare_voice.py`, `python3 scripts/smoke.py`,
 `python3 scripts/package.py`.
 
 PRs bauen und prüfen die ZIP als Actions-Artefakt. Nach Merge auf `main` veröffentlicht

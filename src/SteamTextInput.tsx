@@ -3,7 +3,7 @@ import { DialogButton, Focusable, TextField } from "@decky/ui";
 import { SteamKeyboard } from "./steam-keyboard";
 
 // Steam forwards remaining props to InputElement; its published types omit type.
-const NativeTextField = TextField as ComponentType<ComponentProps<typeof TextField> & { type: "text" | "password" }>;
+const NativeTextField = TextField as ComponentType<ComponentProps<typeof TextField> & { type: "text" | "password"; placeholder?: string }>;
 
 type Props = {
   label: string; value: string; onChange: (value: string) => void;
@@ -30,17 +30,17 @@ export function SteamTextInput(props: Props) {
   useEffect(() => () => { keyboard.current?.hide(); keyboard.current = null; }, []);
   useEffect(() => { if (props.disabled) keyboard.current?.hide(); }, [props.disabled]);
   return <div className={`dc-input-control ${props.compact ? "dc-input-compact" : ""}`}>
-    <div className="dc-input-row">
-      <Focusable className="dc-input-target" ref={wrapper} onActivate={show} focusClassName="dc-input-focused">
+    <Focusable className="dc-input-row" flow-children="row">
+      <Focusable className="dc-input-target" flow-children="column" ref={wrapper} onActivate={show} focusClassName="dc-input-focused">
         <NativeTextField label={props.compact ? <span className="dc-sr-only">{props.label}</span> : props.label}
-          aria-label={props.label} value={props.value} disabled={props.disabled} type={props.password ? "password" : "text"}
+          placeholder={props.compact ? "Frag Codex etwas …" : undefined} aria-label={props.label} value={props.value} disabled={props.disabled} type={props.password ? "password" : "text"}
           onChange={event => props.onChange(event.target.value)} onFocus={show} onClick={show} onKeyDown={props.onKeyDown} />
       </Focusable>
       <DialogButton className="dc-button dc-icon-button dc-keyboard-button" disabled={props.disabled} onClick={show}>
         <svg className="dc-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="3"/><path d="M5 9h2m2 0h2m2 0h2m2 0h2M5 12h2m2 0h2m2 0h2m2 0h2M7 16h10"/></svg>
         <span className="dc-sr-only">Tastatur öffnen: {props.label}</span>
       </DialogButton>
-    </div>
+    </Focusable>
     {error && <p className="dc-input-error" role="alert">{error} Bitte das Tastatursymbol erneut wählen.</p>}
   </div>;
 }

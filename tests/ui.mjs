@@ -61,12 +61,39 @@ try {
     const label = page.getByRole("button", { name: text, exact: true }).locator(".dc-truncate");
     assert.ok(await label.evaluate(el => el.scrollWidth <= el.clientWidth + 1));
   }
+  assert.equal(await sidebar.getAttribute("flow-children"), "column");
+  assert.equal(await page.locator(".dc-sidebar-bottom").getAttribute("flow-children"), "column");
+  assert.equal(await page.locator(".dc-app").getAttribute("flow-children"), "row");
+  const newChat = page.getByRole("button", { name: "Neuer Chat", exact: true });
+  await newChat.focus(); await newChat.press("ArrowDown");
+  assert.equal(await page.evaluate(() => document.activeElement.textContent.trim()), "Alle Chats");
+  await page.getByRole("button", { name: "Einstellungen", exact: true }).focus();
+  await page.getByRole("button", { name: "Einstellungen", exact: true }).press("ArrowDown");
+  assert.equal(await page.evaluate(() => document.activeElement.textContent.trim()), "Zurück zu Steam");
+  // Scroll messages must reach the transcript even while a sidebar button owns focus.
+  const original = await page.evaluate(() => window.__test.state.chat.messages[1].text);
+  await page.evaluate(() => { window.__test.state.chat.messages[1].text += "\n\n" + "Langer Antworttext.\n\n".repeat(70); window.__test.publish(); });
+  await page.waitForTimeout(100);
+  await page.locator(".dc-transcript").evaluate(el => { el.scrollTop = 300; });
+  await page.evaluate(() => window.__test.analog(0, 47, 1, 0, 1));
+  assert.ok(await page.locator(".dc-transcript").evaluate(el => el.scrollTop < 300));
+  const scrollBefore = await page.locator(".dc-transcript").evaluate(el => el.scrollTop);
+  await page.evaluate(() => window.__test.analog(0, 47, 1, 0, -1));
+  assert.ok(await page.locator(".dc-transcript").evaluate(el => el.scrollTop > scrollBefore));
+  await page.evaluate(text => { window.__test.state.chat.messages[1].text = text; window.__test.publish(); }, original);
+  await page.waitForTimeout(100);
   await page.screenshot({ path: "out/ui-chat.png" });
   await page.getByRole("button", { name: /Aktivitäten – technische Details/ }).click();
   await page.getByText("Exakter Werkzeugschritt: 42 Dateien geprüft").waitFor();
   await page.getByRole("button", { name: /Aktivitäten – technische Details/ }).click();
   const input = page.getByRole("textbox", { name: "Nachricht an Codex", exact: true });
   assert.equal(await input.getAttribute("data-native-steam-field"), "true");
+  const aligned = await input.evaluate(el => {
+    const box = el.getBoundingClientRect(), composer = el.closest(".dc-composer").getBoundingClientRect();
+    return Math.abs(box.y + box.height / 2 - composer.y - composer.height / 2) < 1 && getComputedStyle(el).paddingTop === "0px" && getComputedStyle(el).paddingBottom === "0px";
+  });
+  assert.equal(aligned, true, "Native input/caret must be centered without asymmetric Steam padding");
+  assert.equal(await input.getAttribute("placeholder"), "Frag Codex etwas …");
   await input.click();
   assert.equal(await input.isVisible(), true);
   assert.equal(await page.evaluate(() => window.__test.keyboardOpen), true);
@@ -150,6 +177,32 @@ try {
   await page.getByRole("button", { name: "Tastatur öffnen: Nachricht an Codex", exact: true }).click();
   assert.equal(await page.evaluate(() => window.__test.keyboardOpen), true);
   await page.evaluate(() => window.__test.keyboardProps.onEnterKeyPress());
+  // Dictation is explicit, editable and never automatically sends a request.
+  const sendsBeforeVoice = await page.evaluate(() => window.__test.calls.filter(c => c.method === "send").length);
+  await page.getByRole("button", { name: "Spracheingabe starten", exact: true }).click();
+  await page.getByRole("button", { name: "Aufnahme beenden", exact: true }).waitFor();
+  await page.screenshot({ path: "out/ui-voice.png" });
+  assert.equal(await input.isDisabled(), true);
+  assert.equal(await page.getByRole("button", { name: "Nachricht senden", exact: true }).isDisabled(), true);
+  await page.getByRole("button", { name: "Aufnahme beenden", exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('input[aria-label="Nachricht an Codex"]').value === "Installiere bitte Programm X");
+  assert.equal(await input.isEnabled(), true);
+  assert.equal(await page.evaluate(() => window.__test.calls.filter(c => c.method === "send").length), sendsBeforeVoice);
+  await page.getByRole("button", { name: "Spracheingabe starten", exact: true }).click();
+  await page.getByRole("button", { name: "Aufnahme beenden", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Verwerfen", exact: true }).click();
+  await page.getByRole("button", { name: "Spracheingabe starten", exact: true }).waitFor();
+  assert.equal(await input.inputValue(), "Installiere bitte Programm X");
+  await page.evaluate(() => { window.__test.voiceFailure = true; });
+  await page.getByRole("button", { name: "Spracheingabe starten", exact: true }).click();
+  await page.getByRole("alert").filter({ hasText: "Test: Mikrofon fehlt" }).waitFor();
+  await page.evaluate(() => { window.__test.voiceFailure = false; });
+  await page.getByRole("button", { name: "Spracheingabe starten", exact: true }).click();
+  await page.getByRole("button", { name: "Aufnahme beenden", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Einstellungen", exact: true }).click();
+  await page.waitForFunction(() => window.__test.voiceState === "idle");
+  await page.getByRole("button", { name: "Zurück zum Chat", exact: true }).click();
+  assert.equal(await input.inputValue(), "Installiere bitte Programm X");
   // Leaving the chat after returning from settings must not reopen settings.
   await page.getByRole("button", { name: "Zurück zu Steam", exact: true }).click();
   assert.equal(await page.evaluate(() => window.__test.closed), true);

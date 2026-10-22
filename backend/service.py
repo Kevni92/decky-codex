@@ -12,6 +12,7 @@ import time
 import uuid
 from pathlib import Path
 from .protocol import CodexClient
+from .voice import Dictation
 from .processes import Session
 from .privilege import RootJob
 from .storage import Inventory, within
@@ -44,6 +45,7 @@ class Service:
         self.emit = emit
         self.codex_home, self.workspace = self.data / "codex", self.data / "workspace"
         self.client = None
+        self.dictation = Dictation(root, data, self.env)
         self.start_lock = asyncio.Lock()
         self.send_lock = asyncio.Lock()
         self.host_lock = asyncio.Lock()
@@ -249,7 +251,9 @@ class Service:
                    "new_chat": self.new_chat, "open_chat": self.open_chat, "rename_chat": self.rename_chat,
                    "delete_chat": self.delete_chat, "send": self.send, "interrupt": self.interrupt,
                    "resolve": self.resolve, "stop_session": self.stop_session,
-                   "refresh_account": self.refresh_account}
+                   "refresh_account": self.refresh_account,
+                   "voice_start": self.dictation.start, "voice_status": self.dictation.status,
+                   "voice_finish": self.dictation.finish, "voice_cancel": self.dictation.cancel}
         if method not in allowed or not isinstance(params, dict):
             raise ValueError("Unbekannte Anfrage.")
         try:
@@ -633,6 +637,7 @@ class Service:
         if self.closed:
             return
         self.closed = True
+        await self.dictation.close()
         self.inventory.cancelled = True
         if self.reaper:
             self.reaper.cancel()

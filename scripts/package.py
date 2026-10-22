@@ -20,7 +20,11 @@ def package():
     for name, expected in manifest["files"].items():
         with (ROOT / "bin" / name).open("rb") as source:
             assert hashlib.file_digest(source, "sha256").hexdigest() == expected, name
-    files = [ROOT / p for p in FILES] + [ROOT / "runtime/manifest.json", ROOT / "runtime/installed.json"]
+    voice = json.loads((ROOT / "runtime/voice-installed.json").read_text())
+    for name, expected in voice["files"].items():
+        with (ROOT / "bin" / name).open("rb") as source:
+            assert hashlib.file_digest(source, "sha256").hexdigest() == expected, name
+    files = [ROOT / p for p in FILES] + [ROOT / "runtime/manifest.json", ROOT / "runtime/installed.json", ROOT / "runtime/voice-manifest.json", ROOT / "runtime/voice-installed.json"]
     for tree in TREES:
         files += [p for p in (ROOT / tree).rglob("*") if p.is_file() and "__pycache__" not in p.parts and p.suffix not in (".pyc", ".map")]
     out = ROOT / "out"
@@ -45,7 +49,7 @@ def package():
     with target.open("rb") as source:
         checksum = hashlib.file_digest(source, "sha256").hexdigest()
     (out / "SHA256SUMS").write_text(checksum + "  " + target.name + "\n")
-    (out / "build.json").write_text(json.dumps({"version": json.loads((ROOT / "package.json").read_text())["version"], "runtime": manifest["version"], "commit": os.environ.get("GITHUB_SHA", "local"), "sha256": checksum}, indent=2) + "\n")
+    (out / "build.json").write_text(json.dumps({"version": json.loads((ROOT / "package.json").read_text())["version"], "runtime": manifest["version"], "voiceRuntime": voice["version"], "commit": os.environ.get("GITHUB_SHA", "local"), "sha256": checksum}, indent=2) + "\n")
     print(f"Verified installable ZIP: {target.name} ({target.stat().st_size:,} bytes)")
 
 if __name__ == "__main__":

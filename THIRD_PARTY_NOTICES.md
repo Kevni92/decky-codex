@@ -18,3 +18,12 @@ Decky Codex's own source is MIT licensed. Bundled components retain their licens
 
 The downloadable runtime archive is pinned by SHA-512 in runtime/manifest.json.
 File hashes for the installed bundle are included in runtime/installed.json.
+
+- whisper.cpp 1.9.5 and ggml: MIT. Source commit and archive checksum are pinned
+  in runtime/voice-manifest.json. https://github.com/ggml-org/whisper.cpp
+  Full texts: licenses/whisper.cpp-MIT.txt and licenses/ggml-MIT.txt.
+- OpenAI Whisper base multilingual model (quantized q5_1): MIT.
+  https://github.com/openai/whisper and https://huggingface.co/ggerganov/whisper.cpp
+  Full text: licenses/Whisper-model-MIT.txt. Model SHA-256 is pinned in the manifest.
+  Static libstdc++/libgcc use the GCC Runtime Library Exception; other linked
+  system libraries remain dynamically supplied by SteamOS.
