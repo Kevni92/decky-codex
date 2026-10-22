@@ -32,11 +32,15 @@ try {
   assert.equal(await page.locator("img").count(), 0);
   const tableContrast = await page.locator("td, th").evaluateAll(cells => {
     const rgb = color => color.match(/[\d.]+/g).map(Number);
-    const luminance = color => rgb(color).slice(0, 3).map(v => { v /= 255; return v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; }).reduce((sum, v, i) => sum + v * [.2126, .7152, .0722][i], 0);
+    const luminance = color => color.slice(0, 3).map(v => { v /= 255; return v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; }).reduce((sum, v, i) => sum + v * [.2126, .7152, .0722][i], 0);
+    const background = element => {
+      const color = rgb(getComputedStyle(element).backgroundColor), alpha = color[3] ?? 1;
+      if (alpha === 1) return color;
+      const parent = element.parentElement ? background(element.parentElement) : [255, 255, 255];
+      return color.slice(0, 3).map((value, index) => value * alpha + parent[index] * (1 - alpha));
+    };
     return cells.map(cell => {
-      let element = cell;
-      while (element.parentElement && rgb(getComputedStyle(element).backgroundColor)[3] === 0) element = element.parentElement;
-      const fg = luminance(getComputedStyle(cell).color), bg = luminance(getComputedStyle(element).backgroundColor);
+      const fg = luminance(rgb(getComputedStyle(cell).color)), bg = luminance(background(cell));
       return (Math.max(fg, bg) + .05) / (Math.min(fg, bg) + .05);
     });
   });
